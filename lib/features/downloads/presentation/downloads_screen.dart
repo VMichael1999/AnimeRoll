@@ -6,43 +6,31 @@ import '../../../core/theme/app_theme.dart';
 import '../../../shared/models/download_model.dart';
 import '../data/downloads_provider.dart';
 
-class DownloadsScreen extends ConsumerStatefulWidget {
+class DownloadsScreen extends ConsumerWidget {
   const DownloadsScreen({super.key});
 
   @override
-  ConsumerState<DownloadsScreen> createState() => _DownloadsScreenState();
-}
-
-class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
-  String? _selectedAlbumKey;
-
-  @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final downloads = ref.watch(downloadsProvider);
     final albums = _DownloadAlbum.fromDownloads(downloads);
-    final selectedAlbum = _selectedAlbumKey == null
-        ? null
-        : albums.where((album) => album.key == _selectedAlbumKey).firstOrNull;
-
-    if (selectedAlbum == null && _selectedAlbumKey != null) {
-      _selectedAlbumKey = null;
-    }
 
     return Scaffold(
       body: SafeArea(
-        child: selectedAlbum == null
-            ? _AlbumLibrary(
-                albums: albums,
-                downloads: downloads,
-                onRefresh: () => ref.read(downloadsProvider.notifier).refresh(),
-                onOpenAlbum: (album) =>
-                    setState(() => _selectedAlbumKey = album.key),
-              )
-            : _AlbumDetail(
-                album: selectedAlbum,
-                onBack: () => setState(() => _selectedAlbumKey = null),
-              ),
+        child: _AlbumLibrary(
+          albums: albums,
+          downloads: downloads,
+          onRefresh: () => ref.read(downloadsProvider.notifier).refresh(),
+          onOpenAlbum: (album) => _openAlbumPlayer(context, album),
+        ),
       ),
+    );
+  }
+
+  void _openAlbumPlayer(BuildContext context, _DownloadAlbum album) {
+    final download = album.firstPlayable;
+    if (download?.localPath == null) return;
+    context.push(
+      '/download-player?id=${Uri.encodeComponent(download!.id)}&title=${Uri.encodeComponent(download.displayEpisodeTitle)}&path=${Uri.encodeComponent(download.localPath!)}&animeTitle=${Uri.encodeComponent(download.albumTitle)}',
     );
   }
 }
@@ -112,140 +100,6 @@ class _AlbumLibrary extends StatelessWidget {
         ),
       ],
     );
-  }
-}
-
-class _AlbumDetail extends ConsumerWidget {
-  final _DownloadAlbum album;
-  final VoidCallback onBack;
-
-  const _AlbumDetail({required this.album, required this.onBack});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(4, 8, 12, 8),
-          child: Row(
-            children: [
-              IconButton(
-                tooltip: 'Volver',
-                onPressed: onBack,
-                icon: const Icon(Icons.arrow_back_ios_new_rounded),
-              ),
-              Expanded(
-                child: Text(
-                  album.title,
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w800,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              IconButton(
-                tooltip: 'Eliminar album',
-                onPressed: () => _confirmDeleteAlbum(context, ref),
-                icon: const Icon(Icons.delete_sweep_rounded),
-              ),
-            ],
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
-          child: Row(
-            children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: SizedBox(
-                  width: 72,
-                  height: 102,
-                  child: _CoverImage(url: album.cover),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '${album.items.length} episodios',
-                      style: const TextStyle(
-                        fontSize: 13,
-                        color: AppColors.textPrimary,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      '${album.savedCount} guardados en el movil',
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-        Expanded(
-          child: ListView.separated(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-            itemCount: album.items.length,
-            separatorBuilder: (context, _) => const SizedBox(height: 8),
-            itemBuilder: (context, index) {
-              final download = album.items[index];
-              return _DownloadDismissTile(
-                download: download,
-                onPlay: () => _openPlayer(context, download),
-                onDelete: () => ref
-                    .read(downloadsProvider.notifier)
-                    .removeDownload(download.id),
-              );
-            },
-          ),
-        ),
-      ],
-    );
-  }
-
-  void _openPlayer(BuildContext context, DownloadModel download) {
-    if (!download.isSavedOnDevice || download.localPath == null) return;
-    context.push(
-      '/download-player?id=${Uri.encodeComponent(download.id)}&title=${Uri.encodeComponent(download.displayEpisodeTitle)}&path=${Uri.encodeComponent(download.localPath!)}&animeTitle=${Uri.encodeComponent(download.albumTitle)}',
-    );
-  }
-
-  Future<void> _confirmDeleteAlbum(BuildContext context, WidgetRef ref) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: AppColors.surface,
-        title: const Text('Eliminar album'),
-        content: Text(
-          'Se eliminaran ${album.items.length} episodios descargados de ${album.title}.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancelar'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: FilledButton.styleFrom(backgroundColor: AppColors.error),
-            child: const Text('Eliminar'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true) return;
-    await ref.read(downloadsProvider.notifier).removeAlbum(album.key);
-    if (context.mounted) onBack();
   }
 }
 
@@ -356,220 +210,6 @@ class _AlbumCard extends StatelessWidget {
   }
 }
 
-class _DownloadDismissTile extends StatelessWidget {
-  final DownloadModel download;
-  final VoidCallback onPlay;
-  final Future<void> Function() onDelete;
-
-  const _DownloadDismissTile({
-    required this.download,
-    required this.onPlay,
-    required this.onDelete,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Dismissible(
-      key: ValueKey(download.id),
-      direction: DismissDirection.endToStart,
-      background: Container(
-        alignment: Alignment.centerRight,
-        padding: const EdgeInsets.only(right: 18),
-        decoration: BoxDecoration(
-          color: AppColors.error,
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: const Row(
-          mainAxisAlignment: MainAxisAlignment.end,
-          children: [
-            Text('Eliminar', style: TextStyle(fontWeight: FontWeight.w800)),
-            SizedBox(width: 8),
-            Icon(Icons.delete_rounded, color: Colors.white),
-          ],
-        ),
-      ),
-      confirmDismiss: (_) => _confirmDelete(context),
-      onDismissed: (_) => onDelete(),
-      child: _DownloadTile(download: download, onTap: onPlay),
-    );
-  }
-
-  Future<bool> _confirmDelete(BuildContext context) async {
-    final result = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: AppColors.surface,
-        title: const Text('Eliminar descarga'),
-        content: Text('Se eliminara ${download.displayEpisodeTitle}.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancelar'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: FilledButton.styleFrom(backgroundColor: AppColors.error),
-            child: const Text('Eliminar'),
-          ),
-        ],
-      ),
-    );
-    return result == true;
-  }
-}
-
-class _DownloadTile extends StatelessWidget {
-  final DownloadModel download;
-  final VoidCallback onTap;
-
-  const _DownloadTile({required this.download, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    final failed =
-        download.status == 'failed' || download.localStatus == 'failed';
-    final completed = download.status == 'completed';
-    final saving = download.localStatus == 'saving';
-    final saved = download.isSavedOnDevice;
-
-    return InkWell(
-      onTap: saved ? onTap : null,
-      borderRadius: BorderRadius.circular(8),
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: AppColors.surface2,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: AppColors.border),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(6),
-                  child: SizedBox(
-                    width: 68,
-                    height: 42,
-                    child: _CoverImage(url: download.thumbnail),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        download.displayEpisodeTitle,
-                        style: const TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w800,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: 3),
-                      Text(
-                        _statusText(download, saved, saving, completed, failed),
-                        style: TextStyle(
-                          fontSize: 10,
-                          color: failed
-                              ? AppColors.error
-                              : AppColors.textSecondary,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-                  ),
-                ),
-                Column(
-                  children: [
-                    Icon(
-                      saved
-                          ? Icons.play_circle_fill_rounded
-                          : Icons.download_rounded,
-                      color: saved
-                          ? AppColors.accent2
-                          : AppColors.textSecondary,
-                      size: 20,
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      saved
-                          ? 'Ver'
-                          : saving
-                          ? '${download.localProgress}%'
-                          : completed
-                          ? 'Listo'
-                          : failed
-                          ? 'Error'
-                          : '${download.progress}%',
-                      style: const TextStyle(
-                        fontSize: 10,
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(3),
-              child: LinearProgressIndicator(
-                value: saving
-                    ? download.localProgress / 100
-                    : download.progress / 100,
-                backgroundColor: AppColors.border,
-                valueColor: AlwaysStoppedAnimation(
-                  failed ? Colors.redAccent : AppColors.accent,
-                ),
-                minHeight: 5,
-              ),
-            ),
-            if (saved) ...[
-              const SizedBox(height: 8),
-              const Row(
-                children: [
-                  Icon(
-                    Icons.touch_app_rounded,
-                    size: 14,
-                    color: AppColors.textSecondary,
-                  ),
-                  SizedBox(width: 4),
-                  Text(
-                    'Toca para reproducir descargado',
-                    style: TextStyle(
-                      fontSize: 10,
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
-  String _statusText(
-    DownloadModel download,
-    bool saved,
-    bool saving,
-    bool completed,
-    bool failed,
-  ) {
-    if (failed) return download.error ?? 'Error desconocido';
-    if (saved) return 'Guardado en Videos/AnimeRoll';
-    if (saving) return 'Guardando en el movil...';
-    if (completed) return 'Listo para guardar';
-    return '${download.quality} · ${download.variant}${download.currentServer != null ? ' · ${download.currentServer}' : ''}';
-  }
-}
-
 class _CoverImage extends StatelessWidget {
   final String? url;
 
@@ -618,6 +258,9 @@ class _DownloadAlbum {
   });
 
   int get savedCount => items.where((item) => item.isSavedOnDevice).length;
+
+  DownloadModel? get firstPlayable =>
+      items.where((item) => item.isSavedOnDevice).firstOrNull;
 
   static List<_DownloadAlbum> fromDownloads(List<DownloadModel> downloads) {
     final grouped = <String, List<DownloadModel>>{};

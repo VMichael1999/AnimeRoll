@@ -79,7 +79,7 @@ class _FavoritesScreenState extends ConsumerState<FavoritesScreen> {
                     Expanded(
                       child: Text(
                         '${visible.length} de ${favorites.length} guardados',
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: AppColors.textSecondary,
                           fontSize: 11,
                         ),
@@ -87,7 +87,7 @@ class _FavoritesScreenState extends ConsumerState<FavoritesScreen> {
                     ),
                     Text(
                       _scoreFirst ? 'Mejor rating' : 'A-Z',
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: AppColors.accent2,
                         fontSize: 11,
                         fontWeight: FontWeight.w800,
@@ -259,7 +259,7 @@ class _FavoriteGrid extends ConsumerWidget {
                           ),
                           child: Row(
                             children: [
-                              const Icon(
+                              Icon(
                                 Icons.star_rounded,
                                 color: AppColors.warning,
                                 size: 12,
@@ -267,7 +267,7 @@ class _FavoriteGrid extends ConsumerWidget {
                               const SizedBox(width: 2),
                               Text(
                                 anime.score!.toStringAsFixed(1),
-                                style: const TextStyle(
+                                style: TextStyle(
                                   color: AppColors.warning,
                                   fontSize: 10,
                                   fontWeight: FontWeight.w800,
@@ -292,7 +292,7 @@ class _FavoriteGrid extends ConsumerWidget {
                             color: Colors.black.withValues(alpha: 0.65),
                             borderRadius: BorderRadius.circular(18),
                           ),
-                          child: const Icon(
+                          child: Icon(
                             Icons.favorite_rounded,
                             color: AppColors.accent2,
                             size: 18,
@@ -306,10 +306,7 @@ class _FavoriteGrid extends ConsumerWidget {
               const SizedBox(height: 7),
               Text(
                 anime.title,
-                style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w800,
-                ),
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800),
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
               ),
@@ -346,7 +343,7 @@ class _MiniTag extends StatelessWidget {
       ),
       child: Text(
         label,
-        style: const TextStyle(fontSize: 9, color: AppColors.textSecondary),
+        style: TextStyle(fontSize: 9, color: AppColors.textSecondary),
       ),
     );
   }
@@ -357,7 +354,7 @@ class _PosterPlaceholder extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const ColoredBox(
+    return ColoredBox(
       color: AppColors.surface2,
       child: Center(
         child: Icon(Icons.favorite_border_rounded, color: AppColors.border),

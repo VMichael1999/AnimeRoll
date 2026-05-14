@@ -45,7 +45,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                       Expanded(
                         child: Text(
                           isHentaila ? 'Catalogo de Hentai' : 'Buscar',
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 20,
                             fontWeight: FontWeight.w800,
                           ),
@@ -230,7 +230,7 @@ class _CatalogHeader extends ConsumerWidget {
           children: [
             Text(
               selected == '#' ? 'Todos' : 'Letra $selected',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 12,
                 color: AppColors.textSecondary,
                 fontWeight: FontWeight.w700,
@@ -252,7 +252,7 @@ class _CatalogHeader extends ConsumerWidget {
                 foregroundColor: AppColors.textPrimary,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(8),
-                  side: const BorderSide(color: AppColors.border),
+                  side: BorderSide(color: AppColors.border),
                 ),
               ),
             ),
@@ -390,21 +390,14 @@ class _SearchInputState extends State<_SearchInput> {
       ),
       child: Row(
         children: [
-          const Icon(
-            Icons.search_rounded,
-            size: 18,
-            color: AppColors.textSecondary,
-          ),
+          Icon(Icons.search_rounded, size: 18, color: AppColors.textSecondary),
           const SizedBox(width: 8),
           Expanded(
             child: TextField(
               controller: widget.controller,
               onChanged: widget.onChanged,
               autofocus: true,
-              style: const TextStyle(
-                fontSize: 13,
-                color: AppColors.textPrimary,
-              ),
+              style: TextStyle(fontSize: 13, color: AppColors.textPrimary),
               decoration: InputDecoration(
                 border: InputBorder.none,
                 hintText: widget.hintText,
@@ -419,7 +412,7 @@ class _SearchInputState extends State<_SearchInput> {
                 widget.controller.clear();
                 widget.onChanged('');
               },
-              child: const Icon(
+              child: Icon(
                 Icons.close,
                 size: 16,
                 color: AppColors.textSecondary,
@@ -445,7 +438,7 @@ class _ProviderModeBadge extends StatelessWidget {
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: AppColors.accent.withValues(alpha: 0.45)),
       ),
-      child: const Row(
+      child: Row(
         children: [
           Icon(Icons.lock_person_rounded, size: 16, color: AppColors.accent2),
           SizedBox(width: 8),
@@ -522,13 +515,14 @@ class _ProviderFilter extends StatelessWidget {
   }
 }
 
-class _ResultsGrid extends StatelessWidget {
+class _ResultsGrid extends ConsumerWidget {
   final List<AnimeModel> list;
 
   const _ResultsGrid({required this.list});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final layout = ref.watch(catalogLayoutProvider);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -536,92 +530,165 @@ class _ResultsGrid extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
           child: Text(
             '${list.length} resultados',
-            style: const TextStyle(
-              fontSize: 11,
-              color: AppColors.textSecondary,
-            ),
+            style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
           ),
         ),
         Expanded(
-          child: GridView.builder(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              childAspectRatio: 0.58,
-              crossAxisSpacing: 14,
-              mainAxisSpacing: 16,
+          child: layout == 'list'
+              ? ListView.separated(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                  itemCount: list.length,
+                  separatorBuilder: (context, _) => const SizedBox(height: 10),
+                  itemBuilder: (context, i) => _ResultListTile(anime: list[i]),
+                )
+              : GridView.builder(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 2,
+                    childAspectRatio: 0.58,
+                    crossAxisSpacing: 14,
+                    mainAxisSpacing: 16,
+                  ),
+                  itemCount: list.length,
+                  itemBuilder: (context, i) => _ResultGridTile(anime: list[i]),
+                ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ResultGridTile extends StatelessWidget {
+  final AnimeModel anime;
+
+  const _ResultGridTile({required this.anime});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () =>
+          context.push('/detail?url=${Uri.encodeComponent(anime.url)}'),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(child: _PosterWithBadge(anime: anime)),
+          const SizedBox(height: 7),
+          Text(
+            anime.title,
+            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ResultListTile extends StatelessWidget {
+  final AnimeModel anime;
+
+  const _ResultListTile({required this.anime});
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(8),
+      onTap: () =>
+          context.push('/detail?url=${Uri.encodeComponent(anime.url)}'),
+      child: Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: Row(
+          children: [
+            SizedBox(
+              width: 58,
+              height: 78,
+              child: _PosterWithBadge(anime: anime),
             ),
-            itemCount: list.length,
-            itemBuilder: (context, i) {
-              final anime = list[i];
-              return GestureDetector(
-                onTap: () => context.push(
-                  '/detail?url=${Uri.encodeComponent(anime.url)}',
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: Stack(
-                        children: [
-                          Positioned.fill(
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(8),
-                              child: anime.cover != null
-                                  ? Image.network(
-                                      anime.cover!,
-                                      fit: BoxFit.cover,
-                                      width: double.infinity,
-                                      errorBuilder: (context, url, _) =>
-                                          const _CoverPlaceholder(),
-                                    )
-                                  : const _CoverPlaceholder(),
-                            ),
-                          ),
-                          if (anime.type != null)
-                            Positioned(
-                              left: 0,
-                              bottom: 0,
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 4,
-                                ),
-                                decoration: const BoxDecoration(
-                                  color: AppColors.surface2,
-                                  borderRadius: BorderRadius.only(
-                                    topRight: Radius.circular(6),
-                                  ),
-                                ),
-                                child: Text(
-                                  anime.type!,
-                                  style: const TextStyle(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w800,
-                                    color: AppColors.textPrimary,
-                                  ),
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    anime.title,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w900),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    [
+                      if (anime.type != null) anime.type,
+                      if (anime.status != null) anime.status,
+                      if (anime.year != null) '${anime.year}',
+                    ].whereType<String>().join(' · '),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 11,
                     ),
-                    const SizedBox(height: 7),
-                    Text(
-                      anime.title,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w800,
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                ),
-              );
-            },
+                  ),
+                ],
+              ),
+            ),
+            Icon(Icons.chevron_right_rounded, color: AppColors.textSecondary),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PosterWithBadge extends StatelessWidget {
+  final AnimeModel anime;
+
+  const _PosterWithBadge({required this.anime});
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        Positioned.fill(
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: anime.cover != null
+                ? Image.network(
+                    anime.cover!,
+                    fit: BoxFit.cover,
+                    width: double.infinity,
+                    errorBuilder: (context, url, _) =>
+                        const _CoverPlaceholder(),
+                  )
+                : const _CoverPlaceholder(),
           ),
         ),
+        if (anime.type != null)
+          Positioned(
+            left: 0,
+            bottom: 0,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: AppColors.surface2,
+                borderRadius: BorderRadius.only(topRight: Radius.circular(6)),
+              ),
+              child: Text(
+                anime.type!,
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+            ),
+          ),
       ],
     );
   }
@@ -632,7 +699,7 @@ class _CoverPlaceholder extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const ColoredBox(
+    return ColoredBox(
       color: AppColors.surface2,
       child: Center(
         child: Icon(Icons.movie_outlined, color: AppColors.border, size: 24),
@@ -693,7 +760,7 @@ void _showCatalogFilters(BuildContext context, WidgetRef ref) {
     context: context,
     backgroundColor: AppColors.surface,
     isScrollControlled: true,
-    shape: const RoundedRectangleBorder(
+    shape: RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
     ),
     builder: (_) => _CatalogFilterSheet(
@@ -800,7 +867,7 @@ class _CatalogFilterSheetState extends State<_CatalogFilterSheet> {
               ),
               IconButton.filledTonal(
                 onPressed: () => Navigator.pop(context),
-                icon: const Icon(Icons.close_rounded),
+                icon: Icon(Icons.close_rounded),
               ),
             ],
           ),
@@ -931,7 +998,7 @@ class _FilterDropdown extends StatelessWidget {
               ),
             ],
           ),
-          style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
+          style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
         ),
         items: [
           DropdownMenuItem<String?>(

@@ -1,6 +1,8 @@
 package com.animeroll.anime_roll
 
+import android.content.ComponentName
 import android.content.ContentValues
+import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
@@ -13,6 +15,7 @@ import java.io.FileInputStream
 
 class MainActivity : FlutterActivity() {
     private val channelName = "anime_roll/media_store"
+    private val iconChannelName = "anime_roll/app_icon"
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -46,6 +49,43 @@ class MainActivity : FlutterActivity() {
                 }
                 else -> result.notImplemented()
             }
+        }
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, iconChannelName).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "setIconStyle" -> {
+                    val style = call.argument<String>("style") ?: "violeta"
+                    try {
+                        setIconStyle(style)
+                        result.success(true)
+                    } catch (error: Exception) {
+                        result.error("icon_swap_failed", error.message, null)
+                    }
+                }
+                else -> result.notImplemented()
+            }
+        }
+    }
+
+    private fun setIconStyle(style: String) {
+        val aliases = mapOf(
+            "violeta" to "com.animeroll.anime_roll.MainActivityVioleta",
+            "oceano" to "com.animeroll.anime_roll.MainActivityOceano",
+            "carmesi" to "com.animeroll.anime_roll.MainActivityCarmesi",
+            "esmeralda" to "com.animeroll.anime_roll.MainActivityEsmeralda"
+        )
+        val selected = aliases[style] ?: aliases.getValue("violeta")
+        val packageManager = applicationContext.packageManager
+
+        aliases.values.forEach { alias ->
+            packageManager.setComponentEnabledSetting(
+                ComponentName(applicationContext, alias),
+                if (alias == selected) {
+                    PackageManager.COMPONENT_ENABLED_STATE_ENABLED
+                } else {
+                    PackageManager.COMPONENT_ENABLED_STATE_DISABLED
+                },
+                PackageManager.DONT_KILL_APP
+            )
         }
     }
 

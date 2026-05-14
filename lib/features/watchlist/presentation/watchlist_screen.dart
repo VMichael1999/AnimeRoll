@@ -73,9 +73,7 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
                           ),
                           const SizedBox(width: 4),
                           _CountBadge(
-                            count: entries
-                                .where((e) => e.status == s)
-                                .length,
+                            count: entries.where((e) => e.status == s).length,
                           ),
                         ],
                       ),
@@ -158,8 +156,7 @@ class _WatchlistTab extends ConsumerWidget {
     return ListView.builder(
       padding: const EdgeInsets.symmetric(vertical: 8),
       itemCount: entries.length,
-      itemBuilder: (context, i) =>
-          _WatchlistCard(entry: entries[i], ref: ref),
+      itemBuilder: (context, i) => _WatchlistCard(entry: entries[i], ref: ref),
     );
   }
 }
@@ -174,9 +171,8 @@ class _WatchlistCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final anime = entry.anime;
     return InkWell(
-      onTap: () => context.push(
-        '/detail?url=${Uri.encodeComponent(anime.url)}',
-      ),
+      onTap: () =>
+          context.push('/detail?url=${Uri.encodeComponent(anime.url)}'),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         child: Row(
@@ -188,16 +184,13 @@ class _WatchlistCard extends StatelessWidget {
                 width: 52,
                 height: 74,
                 fit: BoxFit.cover,
-                placeholder: (context, url) => Container(
-                  color: AppColors.surface2,
-                  width: 52,
-                  height: 74,
-                ),
+                placeholder: (context, url) =>
+                    Container(color: AppColors.surface2, width: 52, height: 74),
                 errorWidget: (context, url, err) => Container(
                   color: AppColors.surface2,
                   width: 52,
                   height: 74,
-                  child: const Icon(
+                  child: Icon(
                     Icons.broken_image_rounded,
                     color: AppColors.border,
                   ),
@@ -249,7 +242,11 @@ class _WatchlistCard extends StatelessWidget {
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(entry.status.icon, size: 11, color: entry.status.color),
+                        Icon(
+                          entry.status.icon,
+                          size: 11,
+                          color: entry.status.color,
+                        ),
                         const SizedBox(width: 4),
                         Text(
                           entry.status.label,
@@ -266,7 +263,7 @@ class _WatchlistCard extends StatelessWidget {
               ),
             ),
             IconButton(
-              icon: const Icon(Icons.more_vert_rounded, size: 18),
+              icon: Icon(Icons.more_vert_rounded, size: 18),
               color: AppColors.textSecondary,
               onPressed: () => _showOptions(context, anime),
             ),
@@ -280,7 +277,7 @@ class _WatchlistCard extends StatelessWidget {
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: AppColors.surface,
-      shape: const RoundedRectangleBorder(
+      shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
       builder: (context) => Column(
@@ -308,12 +305,9 @@ class _WatchlistCard extends StatelessWidget {
               },
             ),
           ),
-          const Divider(height: 1, color: AppColors.border),
+          Divider(height: 1, color: AppColors.border),
           ListTile(
-            leading: const Icon(
-              Icons.delete_outline_rounded,
-              color: AppColors.error,
-            ),
+            leading: Icon(Icons.delete_outline_rounded, color: AppColors.error),
             title: const Text(
               'Quitar de la lista',
               style: TextStyle(color: AppColors.error),

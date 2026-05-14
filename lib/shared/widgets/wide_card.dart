@@ -28,20 +28,27 @@ class WideCard extends StatelessWidget {
                   fit: BoxFit.cover,
                   color: Colors.black.withValues(alpha: 0.4),
                   colorBlendMode: BlendMode.darken,
-                  placeholder: (context, _) => const ColoredBox(color: AppColors.surface2),
-                  errorWidget: (context, url, _) => const ColoredBox(color: AppColors.surface2),
+                  placeholder: (context, _) =>
+                      ColoredBox(color: AppColors.surface2),
+                  errorWidget: (context, url, _) =>
+                      ColoredBox(color: AppColors.surface2),
                 )
               else
-                const ColoredBox(color: AppColors.surface2),
+                ColoredBox(color: AppColors.surface2),
               Positioned(
-                bottom: 0, left: 0, right: 0,
+                bottom: 0,
+                left: 0,
+                right: 0,
                 child: Container(
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
                       begin: Alignment.topCenter,
                       end: Alignment.bottomCenter,
-                      colors: [Colors.transparent, Colors.black.withValues(alpha: 0.8)],
+                      colors: [
+                        Colors.transparent,
+                        Colors.black.withValues(alpha: 0.8),
+                      ],
                     ),
                   ),
                   child: Column(
@@ -49,14 +56,20 @@ class WideCard extends StatelessWidget {
                     children: [
                       Text(
                         anime.title,
-                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                        ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
                       if (subtitle != null)
                         Text(
                           subtitle!,
-                          style: const TextStyle(fontSize: 9, color: AppColors.textSecondary),
+                          style: const TextStyle(
+                            fontSize: 9,
+                            color: AppColors.textSecondary,
+                          ),
                         ),
                     ],
                   ),

@@ -10,9 +10,12 @@ import 'package:webview_flutter/webview_flutter.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../shared/models/anime_model.dart';
 import '../../../shared/models/episode_model.dart';
+import '../../../shared/widgets/app_toast.dart';
 import '../../../shared/widgets/error_view.dart';
 import '../../detail/data/detail_provider.dart';
+import '../../downloads/data/downloads_provider.dart';
 import '../../favorites/data/favorites_provider.dart';
+import '../../history/data/watch_history_provider.dart';
 import '../../settings/data/settings_provider.dart';
 import '../data/player_provider.dart';
 
@@ -42,11 +45,15 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   String? _initializingVideoUrl;
   String? _playerError;
   List<VideoServerModel> _lastServers = const [];
+  AnimeDetailData? _latestDetail;
+  DateTime? _lastHistorySaveAt;
 
   @override
   void dispose() {
     _sleepTimer?.cancel();
+    _saveCurrentProgress(force: true);
     _chewieController?.dispose();
+    _videoController?.removeListener(_onVideoProgress);
     _videoController?.dispose();
     SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
     super.dispose();
@@ -56,8 +63,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     final videoUrl = server.url;
     if (_initializingVideoUrl == videoUrl) return;
 
+    _saveCurrentProgress(force: true);
     _chewieController?.dispose();
     final previousController = _videoController;
+    previousController?.removeListener(_onVideoProgress);
     _videoController = null;
     await previousController?.dispose();
 
@@ -79,6 +88,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         if (_videoController == controller) _videoController = null;
         return;
       }
+      await _seekToSavedPosition(controller);
+      controller.addListener(_onVideoProgress);
 
       _chewieController = ChewieController(
         videoPlayerController: controller,
@@ -87,7 +98,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         allowMuting: true,
         showControlsOnInitialize: false,
         deviceOrientationsAfterFullScreen: [DeviceOrientation.portraitUp],
-        placeholder: const ColoredBox(color: Colors.black),
+        placeholder: ColoredBox(color: Colors.black),
       );
       await ref.read(preferredPlaybackServerProvider.notifier).set(server.name);
       _startPlaybackAfterFirstFrame(videoUrl);
@@ -105,15 +116,70 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     if (mounted) setState(() {});
   }
 
+  Future<void> _seekToSavedPosition(VideoPlayerController controller) async {
+    final entry = ref
+        .read(watchHistoryProvider.notifier)
+        .find(widget.episodeUrl);
+    if (entry == null || entry.completed) return;
+    final position = Duration(milliseconds: entry.positionMs);
+    final duration = controller.value.duration;
+    if (position < const Duration(seconds: 10) ||
+        duration <= Duration.zero ||
+        position >= duration - const Duration(seconds: 30)) {
+      return;
+    }
+    await controller.seekTo(position);
+  }
+
+  void _onVideoProgress() {
+    final now = DateTime.now();
+    final last = _lastHistorySaveAt;
+    if (last != null && now.difference(last) < const Duration(seconds: 10)) {
+      return;
+    }
+    _lastHistorySaveAt = now;
+    _saveCurrentProgress();
+  }
+
+  void _saveCurrentProgress({bool force = false}) {
+    final controller = _videoController;
+    if (controller == null || !controller.value.isInitialized) return;
+    if (!force &&
+        controller.value.position < const Duration(seconds: 5) &&
+        controller.value.duration > const Duration(minutes: 1)) {
+      return;
+    }
+
+    final detail = _latestDetail;
+    final episode = detail?.episodes
+        .where((item) => item.url == widget.episodeUrl)
+        .firstOrNull;
+    final animeUrl = widget.animeUrl.isNotEmpty
+        ? widget.animeUrl
+        : detail?.anime.url ?? _inferAnimeUrl(widget.episodeUrl);
+    unawaited(
+      ref
+          .read(watchHistoryProvider.notifier)
+          .upsertProgress(
+            episodeUrl: widget.episodeUrl,
+            episodeTitle: episode?.title ?? widget.title,
+            animeTitle: detail?.anime.title ?? widget.title.split('·').first,
+            animeUrl: animeUrl,
+            thumbnail: episode?.thumbnail ?? detail?.anime.cover,
+            episodeNumber: episode?.number,
+            position: controller.value.position,
+            duration: controller.value.duration,
+            source: 'stream',
+          ),
+    );
+  }
+
   void _startPlaybackAfterFirstFrame(String videoUrl) {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await Future<void>.delayed(const Duration(milliseconds: 120));
       if (!mounted || _activeVideoUrl != videoUrl) return;
       final controller = _videoController;
       if (controller == null || !controller.value.isInitialized) return;
-      if (controller.value.position > const Duration(seconds: 1)) {
-        await controller.seekTo(Duration.zero);
-      }
       await controller.play();
     });
   }
@@ -201,6 +267,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     final detailAsync = animeUrl.isEmpty
         ? null
         : ref.watch(animeDetailProvider(animeUrl));
+    _latestDetail = detailAsync?.valueOrNull;
 
     final videoArea = SafeArea(
       bottom: false,
@@ -231,7 +298,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                 return Center(
                   child: Text(
                     _playerError!,
-                    style: const TextStyle(color: Colors.white),
+                    style: TextStyle(color: Colors.white),
                   ),
                 );
               }
@@ -285,6 +352,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                     data: (servers) => _PlayerInfo(
                       title: widget.title,
                       episodeUrl: widget.episodeUrl,
+                      animeUrl: animeUrl,
                       servers: servers,
                       selectedIndex: selectedIndex,
                       detailAsync: detailAsync,
@@ -300,11 +368,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                         ref.read(selectedServerProvider.notifier).state = i;
                         _chewieController?.dispose();
                         final controller = _videoController;
+                        _saveCurrentProgress(force: true);
                         _chewieController = null;
                         _videoController = null;
                         _activeVideoUrl = null;
                         _initializingVideoUrl = null;
                         _playerError = null;
+                        controller?.removeListener(_onVideoProgress);
                         controller?.dispose();
                         if (_isDirectVideoUrl(servers[i].url)) {
                           _initPlayer(servers[i]);
@@ -345,9 +415,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   }
 }
 
-class _PlayerInfo extends StatelessWidget {
+class _PlayerInfo extends ConsumerWidget {
   final String title;
   final String episodeUrl;
+  final String animeUrl;
   final List<VideoServerModel> servers;
   final int selectedIndex;
   final AsyncValue<AnimeDetailData>? detailAsync;
@@ -361,6 +432,7 @@ class _PlayerInfo extends StatelessWidget {
   const _PlayerInfo({
     required this.title,
     required this.episodeUrl,
+    required this.animeUrl,
     required this.servers,
     required this.selectedIndex,
     required this.detailAsync,
@@ -376,7 +448,7 @@ class _PlayerInfo extends StatelessWidget {
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: AppColors.surface,
-      shape: const RoundedRectangleBorder(
+      shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
       builder: (ctx) => Column(
@@ -399,7 +471,7 @@ class _PlayerInfo extends StatelessWidget {
           const SizedBox(height: 8),
           for (final minutes in [15, 30, 45, 60, 90])
             ListTile(
-              leading: const Icon(
+              leading: Icon(
                 Icons.bedtime_rounded,
                 color: AppColors.accent2,
                 size: 20,
@@ -416,8 +488,55 @@ class _PlayerInfo extends StatelessWidget {
     );
   }
 
+  Future<void> _downloadCurrentEpisode(
+    BuildContext context,
+    WidgetRef ref,
+  ) async {
+    final detail = detailAsync?.valueOrNull;
+    final anime = detail?.anime;
+    final episode = detail?.episodes
+        .where((item) => item.url == episodeUrl)
+        .firstOrNull;
+
+    try {
+      await ref
+          .read(downloadsProvider.notifier)
+          .startEpisode(
+            episodeUrl: episodeUrl,
+            title: anime == null
+                ? title
+                : '${anime.title} · ${episode?.title ?? title}',
+            thumbnail: episode?.thumbnail ?? anime?.cover,
+            animeTitle: anime?.title,
+            animeUrl: anime?.url ?? animeUrl,
+            episodeTitle: episode?.title ?? title,
+            episodeNumber: episode?.number,
+            quality: ref.read(qualityPrefProvider),
+            variant: ref.read(variantPrefProvider),
+            preferredServer: animeUrl.contains('hentaila.com')
+                ? 'VIP'
+                : 'yourupload',
+          );
+      if (context.mounted) {
+        AppToast.show(
+          context,
+          message: 'Descarga agregada',
+          type: AppToastType.success,
+        );
+      }
+    } catch (_) {
+      if (context.mounted) {
+        AppToast.show(
+          context,
+          message: 'No se pudo iniciar la descarga',
+          type: AppToastType.error,
+        );
+      }
+    }
+  }
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -426,7 +545,7 @@ class _PlayerInfo extends StatelessWidget {
           Row(
             children: [
               IconButton(
-                icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
+                icon: Icon(Icons.arrow_back_ios_new_rounded, size: 18),
                 onPressed: () => context.pop(),
                 padding: EdgeInsets.zero,
                 color: AppColors.textPrimary,
@@ -435,10 +554,7 @@ class _PlayerInfo extends StatelessWidget {
               Expanded(
                 child: Text(
                   title,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                  ),
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
                   maxLines: 2,
                 ),
               ),
@@ -474,7 +590,7 @@ class _PlayerInfo extends StatelessWidget {
                         const SizedBox(width: 4),
                         Text(
                           formatSleepTimer(sleepTimerRemaining!),
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 11,
                             color: AppColors.accent2,
                             fontWeight: FontWeight.w700,
@@ -486,12 +602,17 @@ class _PlayerInfo extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 4),
+              IconButton(
+                icon: Icon(Icons.download_rounded, size: 20),
+                onPressed: () => _downloadCurrentEpisode(context, ref),
+                padding: EdgeInsets.zero,
+                color: AppColors.textSecondary,
+                tooltip: 'Descargar episodio',
+              ),
+              const SizedBox(width: 2),
               if (onPiP != null)
                 IconButton(
-                  icon: const Icon(
-                    Icons.picture_in_picture_alt_rounded,
-                    size: 20,
-                  ),
+                  icon: Icon(Icons.picture_in_picture_alt_rounded, size: 20),
                   onPressed: onPiP,
                   padding: EdgeInsets.zero,
                   color: AppColors.textSecondary,
@@ -721,7 +842,7 @@ class _EpisodeGridPanelState extends State<_EpisodeGridPanel> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
+              Text(
                 'Estás viendo',
                 style: TextStyle(
                   fontSize: 11,
@@ -732,10 +853,7 @@ class _EpisodeGridPanelState extends State<_EpisodeGridPanel> {
               const SizedBox(height: 6),
               Text(
                 currentEpisode?.title ?? 'Episodio',
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w800,
-                ),
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
               ),
               const SizedBox(height: 10),
               Row(
@@ -768,7 +886,7 @@ class _EpisodeGridPanelState extends State<_EpisodeGridPanel> {
                 const SizedBox(height: 8),
                 Text(
                   'Búsqueda: $_query',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 11,
                     color: AppColors.textSecondary,
                   ),
@@ -917,7 +1035,7 @@ class _HentailaEpisodeListPanel extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             'Estas viendo',
             style: TextStyle(
               fontSize: 11,
@@ -928,7 +1046,7 @@ class _HentailaEpisodeListPanel extends StatelessWidget {
           const SizedBox(height: 6),
           Text(
             current.title,
-            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
           ),
           const SizedBox(height: 14),
           ConstrainedBox(
@@ -994,12 +1112,12 @@ class _HentailaEpisodeTile extends StatelessWidget {
                 width: 58,
                 height: 58,
                 child: thumbnail == null
-                    ? const ColoredBox(color: AppColors.surface)
+                    ? ColoredBox(color: AppColors.surface)
                     : Image.network(
                         thumbnail,
                         fit: BoxFit.cover,
                         errorBuilder: (context, error, stackTrace) =>
-                            const ColoredBox(color: AppColors.surface),
+                            ColoredBox(color: AppColors.surface),
                       ),
               ),
             ),
@@ -1021,7 +1139,7 @@ class _HentailaEpisodeTile extends StatelessWidget {
                   const SizedBox(height: 3),
                   Text(
                     anime.title,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 11,
                       color: AppColors.textSecondary,
                     ),
@@ -1032,7 +1150,7 @@ class _HentailaEpisodeTile extends StatelessWidget {
               ),
             ),
             if (active)
-              const Icon(
+              Icon(
                 Icons.play_circle_fill_rounded,
                 color: AppColors.accent2,
                 size: 22,
@@ -1065,7 +1183,7 @@ class _RangeShell extends StatelessWidget {
           Expanded(
             child: Text(
               label,
-              style: const TextStyle(
+              style: TextStyle(
                 color: AppColors.textPrimary,
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
@@ -1073,7 +1191,7 @@ class _RangeShell extends StatelessWidget {
             ),
           ),
           if (showChevron)
-            const Icon(
+            Icon(
               Icons.keyboard_arrow_down_rounded,
               size: 18,
               color: AppColors.textSecondary,
@@ -1216,7 +1334,7 @@ class _EpisodeInfoBody extends ConsumerWidget {
               Expanded(
                 child: Text(
                   anime!.title,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w800,
                     color: AppColors.accent2,
@@ -1264,16 +1382,13 @@ class _EpisodeInfoBody extends ConsumerWidget {
         const SizedBox(height: 4),
         Text(
           title,
-          style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800),
+          style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800),
         ),
         if (metadata.isNotEmpty) ...[
           const SizedBox(height: 10),
           Text(
             metadata.join('  •  '),
-            style: const TextStyle(
-              fontSize: 12,
-              color: AppColors.textSecondary,
-            ),
+            style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
           ),
         ],
         if (anime?.genres.isNotEmpty == true) ...[
@@ -1290,7 +1405,7 @@ class _EpisodeInfoBody extends ConsumerWidget {
           const SizedBox(height: 18),
           Text(
             anime!.synopsis!,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 13,
               color: AppColors.textPrimary,
               height: 1.55,
@@ -1354,7 +1469,7 @@ class _GenrePill extends StatelessWidget {
       ),
       child: Text(
         label,
-        style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+        style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
       ),
     );
   }
@@ -1390,17 +1505,11 @@ class _MetricChip extends StatelessWidget {
             children: [
               Text(
                 label,
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w800,
-                ),
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
               ),
               Text(
                 sublabel,
-                style: const TextStyle(
-                  fontSize: 9,
-                  color: AppColors.textSecondary,
-                ),
+                style: TextStyle(fontSize: 9, color: AppColors.textSecondary),
               ),
             ],
           ),
@@ -1456,7 +1565,7 @@ class _ServerVariantRows extends StatelessWidget {
                 onServerSelect: onServerSelect,
               ),
               if (rowIndex < variants.length - 1)
-                const Divider(height: 1, color: AppColors.border),
+                Divider(height: 1, color: AppColors.border),
             ],
           );
         }).toList(),
@@ -1494,7 +1603,7 @@ class _ServerVariantRow extends StatelessWidget {
             width: 34,
             child: Text(
               variant,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w700,
                 color: AppColors.textSecondary,

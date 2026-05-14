@@ -20,6 +20,7 @@ class DownloadsNotifier extends StateNotifier<List<DownloadModel>> {
   final DeviceVideoSaver _videoSaver;
   Timer? _timer;
   final Set<String> _savingIds = {};
+  bool _localSaveRunning = false;
 
   DownloadsNotifier(this._ref)
     : _videoSaver = DeviceVideoSaver(),
@@ -49,6 +50,7 @@ class DownloadsNotifier extends StateNotifier<List<DownloadModel>> {
     final enriched = DownloadModel(
       id: download.id,
       status: download.status,
+      phase: download.phase,
       progress: download.progress,
       url: download.url,
       title: title,
@@ -63,6 +65,16 @@ class DownloadsNotifier extends StateNotifier<List<DownloadModel>> {
       fileSize: download.fileSize,
       currentServer: download.currentServer,
       error: download.error,
+      downloadedBytes: download.downloadedBytes,
+      totalBytes: download.totalBytes,
+      speedBytesPerSecond: download.speedBytesPerSecond,
+      etaSeconds: download.etaSeconds,
+      createdAt: download.createdAt,
+      queuedAt: download.queuedAt,
+      startedAt: download.startedAt,
+      transferStartedAt: download.transferStartedAt,
+      updatedAt: download.updatedAt,
+      completedAt: download.completedAt,
     );
     state = [enriched, ...state.where((item) => item.id != download.id)];
     unawaited(_persist());
@@ -127,6 +139,7 @@ class DownloadsNotifier extends StateNotifier<List<DownloadModel>> {
           item.copyWith(
             id: latest.id,
             status: latest.status,
+            phase: latest.phase,
             progress: latest.progress,
             url: latest.url,
             quality: latest.quality,
@@ -135,6 +148,16 @@ class DownloadsNotifier extends StateNotifier<List<DownloadModel>> {
             fileSize: latest.fileSize,
             currentServer: latest.currentServer,
             error: latest.error,
+            downloadedBytes: latest.downloadedBytes,
+            totalBytes: latest.totalBytes,
+            speedBytesPerSecond: latest.speedBytesPerSecond,
+            etaSeconds: latest.etaSeconds,
+            createdAt: latest.createdAt,
+            queuedAt: latest.queuedAt,
+            startedAt: latest.startedAt,
+            transferStartedAt: latest.transferStartedAt,
+            updatedAt: latest.updatedAt,
+            completedAt: latest.completedAt,
           ),
         );
       } on DioException catch (error) {
@@ -155,18 +178,48 @@ class DownloadsNotifier extends StateNotifier<List<DownloadModel>> {
     }
     state = updated;
     unawaited(_persist());
-    for (final item in state) {
-      if (item.status == 'completed' &&
-          item.downloadUrl != null &&
-          !item.isSavedOnDevice &&
-          !item.isLocalRunning &&
-          item.localStatus != 'failed') {
-        unawaited(_saveToDevice(item));
-      }
-    }
-    if (!state.any((item) => item.isRunning || item.isLocalRunning)) {
+    unawaited(_drainLocalSaveQueue());
+    if (!state.any((item) => item.isActive)) {
       _timer?.cancel();
       _timer = null;
+    }
+  }
+
+  Future<void> pauseDownload(String id) async {
+    _updateItem(id, (download) {
+      if (download.isSavedOnDevice || download.localStatus == 'failed') {
+        return download;
+      }
+      return download.copyWith(localStatus: 'paused');
+    });
+  }
+
+  Future<void> resumeDownload(String id) async {
+    _updateItem(id, (download) {
+      if (!download.isPaused) return download;
+      return download.copyWith(localStatus: 'pending');
+    });
+    _startPolling();
+    unawaited(_drainLocalSaveQueue());
+  }
+
+  Future<void> pauseAll() async {
+    state = [
+      for (final item in state)
+        if (item.isSavedOnDevice || item.localStatus == 'failed')
+          item
+        else
+          item.copyWith(localStatus: 'paused'),
+    ];
+    await _persist();
+  }
+
+  Future<void> cancelActive() async {
+    final targets = state.where((item) => item.isActive).toList();
+    state = state.where((item) => !item.isActive).toList();
+    await _persist();
+    for (final item in targets) {
+      await _videoSaver.deleteVideo(item.localPath);
     }
   }
 
@@ -197,6 +250,30 @@ class DownloadsNotifier extends StateNotifier<List<DownloadModel>> {
       (_) => unawaited(refresh()),
     );
     unawaited(refresh());
+  }
+
+  Future<void> _drainLocalSaveQueue() async {
+    if (_localSaveRunning) return;
+    _localSaveRunning = true;
+    try {
+      while (mounted) {
+        final next = state
+            .where(
+              (item) =>
+                  item.status == 'completed' &&
+                  item.downloadUrl != null &&
+                  !item.isSavedOnDevice &&
+                  !item.isLocalRunning &&
+                  item.localStatus != 'failed' &&
+                  !item.isPaused,
+            )
+            .firstOrNull;
+        if (next == null) break;
+        await _saveToDevice(next);
+      }
+    } finally {
+      _localSaveRunning = false;
+    }
   }
 
   Future<void> _saveToDevice(DownloadModel item) async {

@@ -1,6 +1,7 @@
 class DownloadModel {
   final String id;
   final String status;
+  final String? phase;
   final int progress;
   final String url;
   final String? title;
@@ -15,6 +16,16 @@ class DownloadModel {
   final String? fileSize;
   final String? currentServer;
   final String? error;
+  final int downloadedBytes;
+  final int? totalBytes;
+  final int? speedBytesPerSecond;
+  final int? etaSeconds;
+  final String? createdAt;
+  final String? queuedAt;
+  final String? startedAt;
+  final String? transferStartedAt;
+  final String? updatedAt;
+  final String? completedAt;
   final String? localPath;
   final int localProgress;
   final String localStatus;
@@ -23,6 +34,7 @@ class DownloadModel {
   const DownloadModel({
     required this.id,
     required this.status,
+    this.phase,
     required this.progress,
     required this.url,
     this.title,
@@ -37,6 +49,16 @@ class DownloadModel {
     this.fileSize,
     this.currentServer,
     this.error,
+    this.downloadedBytes = 0,
+    this.totalBytes,
+    this.speedBytesPerSecond,
+    this.etaSeconds,
+    this.createdAt,
+    this.queuedAt,
+    this.startedAt,
+    this.transferStartedAt,
+    this.updatedAt,
+    this.completedAt,
     this.localPath,
     this.localProgress = 0,
     this.localStatus = 'pending',
@@ -49,6 +71,16 @@ class DownloadModel {
   bool get isLocalRunning => localStatus == 'saving';
 
   bool get isSavedOnDevice => localStatus == 'saved' && localPath != null;
+
+  bool get isPaused => localStatus == 'paused';
+
+  bool get isQueuedForLocalSave =>
+      status == 'completed' && localStatus == 'pending';
+
+  bool get isActive =>
+      isRunning || isLocalRunning || isQueuedForLocalSave || isPaused;
+
+  int get effectiveProgress => isLocalRunning ? localProgress : progress;
 
   String get albumTitle {
     final inferred = animeTitle ?? title?.split('·').first.trim();
@@ -71,6 +103,7 @@ class DownloadModel {
   factory DownloadModel.fromJson(Map<String, dynamic> json) => DownloadModel(
     id: json['downloadId'] as String? ?? json['id'] as String? ?? '',
     status: json['status'] as String? ?? 'queued',
+    phase: json['phase'] as String?,
     progress: (json['progress'] as num?)?.toInt() ?? 0,
     url: json['url'] as String? ?? '',
     title: json['title'] as String?,
@@ -85,6 +118,16 @@ class DownloadModel {
     fileSize: json['fileSize']?.toString(),
     currentServer: json['currentServer'] as String?,
     error: json['error'] as String?,
+    downloadedBytes: (json['downloadedBytes'] as num?)?.toInt() ?? 0,
+    totalBytes: (json['totalBytes'] as num?)?.toInt(),
+    speedBytesPerSecond: (json['speedBytesPerSecond'] as num?)?.toInt(),
+    etaSeconds: (json['etaSeconds'] as num?)?.toInt(),
+    createdAt: json['createdAt']?.toString(),
+    queuedAt: json['queuedAt']?.toString(),
+    startedAt: json['startedAt']?.toString(),
+    transferStartedAt: json['transferStartedAt']?.toString(),
+    updatedAt: json['updatedAt']?.toString(),
+    completedAt: json['completedAt']?.toString(),
     localPath: json['localPath'] as String?,
     localProgress: (json['localProgress'] as num?)?.toInt() ?? 0,
     localStatus: json['localStatus'] as String? ?? 'pending',
@@ -94,6 +137,7 @@ class DownloadModel {
   Map<String, dynamic> toJson() => {
     'id': id,
     'status': status,
+    'phase': phase,
     'progress': progress,
     'url': url,
     'title': title,
@@ -108,6 +152,16 @@ class DownloadModel {
     'fileSize': fileSize,
     'currentServer': currentServer,
     'error': error,
+    'downloadedBytes': downloadedBytes,
+    'totalBytes': totalBytes,
+    'speedBytesPerSecond': speedBytesPerSecond,
+    'etaSeconds': etaSeconds,
+    'createdAt': createdAt,
+    'queuedAt': queuedAt,
+    'startedAt': startedAt,
+    'transferStartedAt': transferStartedAt,
+    'updatedAt': updatedAt,
+    'completedAt': completedAt,
     'localPath': localPath,
     'localProgress': localProgress,
     'localStatus': localStatus,
@@ -117,6 +171,7 @@ class DownloadModel {
   DownloadModel copyWith({
     String? id,
     String? status,
+    String? phase,
     int? progress,
     String? url,
     String? title,
@@ -131,6 +186,16 @@ class DownloadModel {
     String? fileSize,
     String? currentServer,
     String? error,
+    int? downloadedBytes,
+    int? totalBytes,
+    int? speedBytesPerSecond,
+    int? etaSeconds,
+    String? createdAt,
+    String? queuedAt,
+    String? startedAt,
+    String? transferStartedAt,
+    String? updatedAt,
+    String? completedAt,
     String? localPath,
     int? localProgress,
     String? localStatus,
@@ -139,6 +204,7 @@ class DownloadModel {
     return DownloadModel(
       id: id ?? this.id,
       status: status ?? this.status,
+      phase: phase ?? this.phase,
       progress: progress ?? this.progress,
       url: url ?? this.url,
       title: title ?? this.title,
@@ -153,6 +219,16 @@ class DownloadModel {
       fileSize: fileSize ?? this.fileSize,
       currentServer: currentServer ?? this.currentServer,
       error: error ?? this.error,
+      downloadedBytes: downloadedBytes ?? this.downloadedBytes,
+      totalBytes: totalBytes ?? this.totalBytes,
+      speedBytesPerSecond: speedBytesPerSecond ?? this.speedBytesPerSecond,
+      etaSeconds: etaSeconds ?? this.etaSeconds,
+      createdAt: createdAt ?? this.createdAt,
+      queuedAt: queuedAt ?? this.queuedAt,
+      startedAt: startedAt ?? this.startedAt,
+      transferStartedAt: transferStartedAt ?? this.transferStartedAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      completedAt: completedAt ?? this.completedAt,
       localPath: localPath ?? this.localPath,
       localProgress: localProgress ?? this.localProgress,
       localStatus: localStatus ?? this.localStatus,

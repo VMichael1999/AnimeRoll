@@ -4,10 +4,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../shared/models/anime_model.dart';
+import '../../../shared/models/download_model.dart';
 import '../../../shared/widgets/anime_card.dart';
 import '../../../shared/widgets/section_header.dart';
 import '../../../shared/widgets/wide_card.dart';
 import '../../downloads/data/downloads_provider.dart';
+import '../../history/data/watch_history_provider.dart';
 import '../../settings/data/settings_provider.dart';
 import '../data/home_provider.dart';
 
@@ -143,12 +145,12 @@ class _HeroSliver extends StatelessWidget {
                 imageUrl: anime!.cover!,
                 fit: BoxFit.cover,
                 placeholder: (context, _) =>
-                    const ColoredBox(color: AppColors.surface2),
+                    ColoredBox(color: AppColors.surface2),
                 errorWidget: (context, url, _) =>
-                    const ColoredBox(color: AppColors.surface2),
+                    ColoredBox(color: AppColors.surface2),
               )
             else
-              const ColoredBox(color: AppColors.surface2),
+              ColoredBox(color: AppColors.surface2),
             Container(
               decoration: BoxDecoration(
                 gradient: LinearGradient(
@@ -199,7 +201,7 @@ class _HeroInfo extends StatelessWidget {
         const SizedBox(height: 4),
         Text(
           anime.title,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 18,
             fontWeight: FontWeight.w800,
             shadows: [Shadow(blurRadius: 8)],
@@ -209,10 +211,7 @@ class _HeroInfo extends StatelessWidget {
         if (anime.genres.isNotEmpty)
           Text(
             '${anime.genres.take(3).join(' · ')}${anime.year != null ? ' · ${anime.year}' : ''}',
-            style: const TextStyle(
-              fontSize: 10,
-              color: AppColors.textSecondary,
-            ),
+            style: TextStyle(fontSize: 10, color: AppColors.textSecondary),
           ),
         const SizedBox(height: 8),
         Row(
@@ -258,7 +257,7 @@ class _HeroButton extends StatelessWidget {
         ),
         child: Text(
           label,
-          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
+          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
         ),
       ),
     );
@@ -352,7 +351,7 @@ class _SearchBar extends ConsumerWidget {
           ),
           child: Row(
             children: [
-              const Icon(
+              Icon(
                 Icons.search_rounded,
                 size: 18,
                 color: AppColors.textSecondary,
@@ -360,10 +359,7 @@ class _SearchBar extends ConsumerWidget {
               const SizedBox(width: 8),
               Text(
                 isHentaila ? 'Buscar en HentaiLA...' : 'Buscar anime...',
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: AppColors.textSecondary,
-                ),
+                style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
               ),
             ],
           ),
@@ -462,12 +458,13 @@ class _ContinueWatching extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final downloads = ref
-        .watch(downloadsProvider)
-        .where((item) => item.isSavedOnDevice)
+    final history = ref
+        .watch(watchHistoryProvider)
+        .where((item) => !item.completed && item.percent > 0.01)
         .take(8)
         .toList();
-    if (downloads.isEmpty) return const SizedBox.shrink();
+    if (history.isEmpty) return const SizedBox.shrink();
+    final downloads = ref.watch(downloadsProvider);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -475,7 +472,7 @@ class _ContinueWatching extends ConsumerWidget {
         SectionHeader(
           title: 'Continuar viendo',
           action: 'Ver todo',
-          onAction: () => context.go('/downloads'),
+          onAction: () => context.go('/history'),
         ),
         const SizedBox(height: 10),
         SizedBox(
@@ -483,21 +480,40 @@ class _ContinueWatching extends ConsumerWidget {
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 16),
-            itemCount: downloads.length,
+            itemCount: history.length,
             separatorBuilder: (context, _) => const SizedBox(width: 10),
             itemBuilder: (context, i) {
-              final item = downloads[i];
+              final item = history[i];
               final anime = AnimeModel(
-                title: item.albumTitle,
-                url: item.animeUrl ?? item.url,
+                title: item.animeTitle,
+                url: item.animeUrl,
                 cover: item.thumbnail,
               );
-              return WideCard(
-                anime: anime,
-                subtitle: item.displayEpisodeTitle,
-                onTap: () => context.push(
-                  '/download-player?id=${Uri.encodeComponent(item.id)}&title=${Uri.encodeComponent(item.displayEpisodeTitle)}&path=${Uri.encodeComponent(item.localPath!)}&animeTitle=${Uri.encodeComponent(item.albumTitle)}',
-                ),
+              return Stack(
+                children: [
+                  WideCard(
+                    anime: anime,
+                    subtitle:
+                        '${item.episodeTitle} · ${(item.percent * 100).round()}%',
+                    onTap: () => _openHistoryItem(context, item, downloads),
+                  ),
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    child: ClipRRect(
+                      borderRadius: const BorderRadius.vertical(
+                        bottom: Radius.circular(12),
+                      ),
+                      child: LinearProgressIndicator(
+                        minHeight: 3,
+                        value: item.percent.clamp(0, 1),
+                        backgroundColor: AppColors.border,
+                        valueColor: AlwaysStoppedAnimation(AppColors.accent2),
+                      ),
+                    ),
+                  ),
+                ],
               );
             },
           ),
@@ -505,11 +521,30 @@ class _ContinueWatching extends ConsumerWidget {
       ],
     );
   }
+
+  void _openHistoryItem(
+    BuildContext context,
+    WatchHistoryEntry item,
+    List<DownloadModel> downloads,
+  ) {
+    final local = downloads
+        .where((download) => download.url == item.episodeUrl)
+        .firstOrNull;
+    if (local?.isSavedOnDevice == true && local?.localPath != null) {
+      context.push(
+        '/download-player?id=${Uri.encodeComponent(local!.id)}&title=${Uri.encodeComponent(local.displayEpisodeTitle)}&path=${Uri.encodeComponent(local.localPath!)}&animeTitle=${Uri.encodeComponent(local.albumTitle)}',
+      );
+      return;
+    }
+    context.push(
+      '/player?url=${Uri.encodeComponent(item.episodeUrl)}&title=${Uri.encodeComponent(item.episodeTitle)}&animeUrl=${Uri.encodeComponent(item.animeUrl)}',
+    );
+  }
 }
 
 // ── Generic horizontal row ────────────────────────────────────────────────────
 
-class _AnimeRow extends StatelessWidget {
+class _AnimeRow extends ConsumerWidget {
   final String title;
   final String? action;
   final List<AnimeModel> list;
@@ -517,8 +552,9 @@ class _AnimeRow extends StatelessWidget {
   const _AnimeRow({required this.title, required this.list, this.action});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     if (list.isEmpty) return const SizedBox.shrink();
+    final layout = ref.watch(catalogLayoutProvider);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -528,29 +564,116 @@ class _AnimeRow extends StatelessWidget {
           onAction: () => context.go('/search'),
         ),
         const SizedBox(height: 10),
-        SizedBox(
-          height: 190,
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
+        if (layout == 'list')
+          ListView.separated(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
             padding: const EdgeInsets.symmetric(horizontal: 16),
-            itemCount: list.length,
-            separatorBuilder: (context, _) => const SizedBox(width: 10),
-            itemBuilder: (context, i) => AnimeCard(
-              anime: list[i],
-              onTap: () => context.push(
-                '/detail?url=${Uri.encodeComponent(list[i].url)}',
+            itemCount: list.take(8).length,
+            separatorBuilder: (context, _) => const SizedBox(height: 10),
+            itemBuilder: (context, i) => _HomeListTile(anime: list[i]),
+          )
+        else
+          SizedBox(
+            height: 190,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              itemCount: list.length,
+              separatorBuilder: (context, _) => const SizedBox(width: 10),
+              itemBuilder: (context, i) => AnimeCard(
+                anime: list[i],
+                onTap: () => context.push(
+                  '/detail?url=${Uri.encodeComponent(list[i].url)}',
+                ),
               ),
             ),
           ),
-        ),
       ],
+    );
+  }
+}
+
+class _HomeListTile extends StatelessWidget {
+  final AnimeModel anime;
+  final VoidCallback? onTapOverride;
+
+  const _HomeListTile({required this.anime, this.onTapOverride});
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(8),
+      onTap:
+          onTapOverride ??
+          () => context.push('/detail?url=${Uri.encodeComponent(anime.url)}'),
+      child: Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: Row(
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: SizedBox(
+                width: 58,
+                height: 78,
+                child: anime.cover == null
+                    ? ColoredBox(color: AppColors.surface2)
+                    : CachedNetworkImage(
+                        imageUrl: anime.cover!,
+                        fit: BoxFit.cover,
+                        errorWidget: (context, url, _) =>
+                            ColoredBox(color: AppColors.surface2),
+                      ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    anime.title,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    [
+                      if (anime.type != null) anime.type,
+                      if (anime.status != null) anime.status,
+                      if (anime.year != null) anime.year,
+                      if (anime.genres.isNotEmpty) anime.genres.first,
+                    ].whereType<String>().join(' · '),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 11,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(Icons.chevron_right_rounded, color: AppColors.textSecondary),
+          ],
+        ),
+      ),
     );
   }
 }
 
 // ── Loading skeleton ──────────────────────────────────────────────────────────
 
-class _HentailaGridSection extends StatelessWidget {
+class _HentailaGridSection extends ConsumerWidget {
   final String title;
   final String subtitle;
   final String? action;
@@ -566,8 +689,9 @@ class _HentailaGridSection extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     if (list.isEmpty) return const SizedBox.shrink();
+    final layout = ref.watch(catalogLayoutProvider);
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Column(
@@ -581,7 +705,7 @@ class _HentailaGridSection extends StatelessWidget {
                   children: [
                     Text(
                       title,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 22,
                         fontWeight: FontWeight.w900,
                       ),
@@ -589,7 +713,7 @@ class _HentailaGridSection extends StatelessWidget {
                     const SizedBox(height: 2),
                     Text(
                       subtitle,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 11,
                         color: Color(0xFFF1C7EB),
                         fontWeight: FontWeight.w800,
@@ -601,39 +725,60 @@ class _HentailaGridSection extends StatelessWidget {
               if (action != null)
                 TextButton.icon(
                   onPressed: () => context.go('/search'),
-                  icon: const Icon(Icons.layers_outlined, size: 16),
+                  icon: Icon(Icons.layers_outlined, size: 16),
                   label: Text(action!),
                 ),
             ],
           ),
           const SizedBox(height: 12),
-          GridView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            itemCount: list.length,
-            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              mainAxisSpacing: 16,
-              crossAxisSpacing: 14,
-              childAspectRatio: episodeCards ? 1.45 : 0.58,
-            ),
-            itemBuilder: (context, index) {
-              final anime = list[index];
-              return _HentailaCard(
-                anime: anime,
-                landscape: episodeCards,
-                onTap: () {
-                  if (episodeCards) {
+          if (layout == 'list')
+            ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: list.take(8).length,
+              separatorBuilder: (context, _) => const SizedBox(height: 10),
+              itemBuilder: (context, index) => _HomeListTile(
+                anime: list[index],
+                onTapOverride: episodeCards
+                    ? () {
+                        final anime = list[index];
+                        context.push(
+                          '/player?url=${Uri.encodeComponent(anime.url)}&title=${Uri.encodeComponent(anime.type ?? anime.title)}&animeUrl=${Uri.encodeComponent(_animeUrlFromEpisodeUrl(anime.url))}',
+                        );
+                      }
+                    : null,
+              ),
+            )
+          else
+            GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: list.length,
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 2,
+                mainAxisSpacing: 16,
+                crossAxisSpacing: 14,
+                childAspectRatio: episodeCards ? 1.45 : 0.58,
+              ),
+              itemBuilder: (context, index) {
+                final anime = list[index];
+                return _HentailaCard(
+                  anime: anime,
+                  landscape: episodeCards,
+                  onTap: () {
+                    if (episodeCards) {
+                      context.push(
+                        '/player?url=${Uri.encodeComponent(anime.url)}&title=${Uri.encodeComponent(anime.type ?? anime.title)}&animeUrl=${Uri.encodeComponent(_animeUrlFromEpisodeUrl(anime.url))}',
+                      );
+                      return;
+                    }
                     context.push(
-                      '/player?url=${Uri.encodeComponent(anime.url)}&title=${Uri.encodeComponent(anime.type ?? anime.title)}&animeUrl=${Uri.encodeComponent(_animeUrlFromEpisodeUrl(anime.url))}',
+                      '/detail?url=${Uri.encodeComponent(anime.url)}',
                     );
-                    return;
-                  }
-                  context.push('/detail?url=${Uri.encodeComponent(anime.url)}');
-                },
-              );
-            },
-          ),
+                  },
+                );
+              },
+            ),
         ],
       ),
     );
@@ -681,12 +826,12 @@ class _HentailaCard extends StatelessWidget {
                       imageUrl: anime.cover!,
                       fit: BoxFit.cover,
                       placeholder: (context, _) =>
-                          const ColoredBox(color: AppColors.surface2),
+                          ColoredBox(color: AppColors.surface2),
                       errorWidget: (context, url, _) =>
-                          const ColoredBox(color: AppColors.surface2),
+                          ColoredBox(color: AppColors.surface2),
                     )
                   else
-                    const ColoredBox(color: AppColors.surface2),
+                    ColoredBox(color: AppColors.surface2),
                   if (landscape)
                     DecoratedBox(
                       decoration: BoxDecoration(
@@ -716,7 +861,7 @@ class _HentailaCard extends StatelessWidget {
                       ),
                       child: Text(
                         anime.type ?? 'OVA',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w800,
                           color: Color(0xFFF1C7EB),
@@ -731,7 +876,7 @@ class _HentailaCard extends StatelessWidget {
           const SizedBox(height: 7),
           Text(
             anime.title,
-            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800),
+            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800),
             maxLines: landscape ? 1 : 2,
             overflow: TextOverflow.ellipsis,
           ),

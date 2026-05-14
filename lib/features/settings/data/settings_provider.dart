@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/constants/app_constants.dart';
@@ -14,10 +16,13 @@ class PersistedSettingNotifier<T> extends StateNotifier<T> {
   Future<void> _load() async {
     final prefs = await SharedPreferences.getInstance();
     final value = prefs.get(key);
-    if (value is T) state = value;
+    if (value is T) state = normalize(value);
   }
 
+  T normalize(T value) => value;
+
   Future<void> set(T value) async {
+    value = normalize(value);
     state = value;
     final prefs = await SharedPreferences.getInstance();
     switch (value) {
@@ -29,6 +34,34 @@ class PersistedSettingNotifier<T> extends StateNotifier<T> {
         await prefs.setInt(key, value);
       default:
         throw UnsupportedError('Unsupported setting type: $T');
+    }
+  }
+}
+
+class AppIconStyleNotifier extends PersistedSettingNotifier<String> {
+  static const _channel = MethodChannel('anime_roll/app_icon');
+
+  AppIconStyleNotifier() : super(key: 'appIconStyle', defaultValue: 'violeta');
+
+  @override
+  String normalize(String value) {
+    return switch (value) {
+      'clapper' || 'bolt' || 'fire' || 'wave' => 'violeta',
+      'violeta' || 'oceano' || 'carmesi' || 'esmeralda' => value,
+      _ => 'violeta',
+    };
+  }
+
+  @override
+  Future<void> set(String value) async {
+    await super.set(value);
+    if (defaultTargetPlatform != TargetPlatform.android) return;
+    try {
+      await _channel.invokeMethod<bool>('setIconStyle', {'style': value});
+    } on PlatformException {
+      // The visual preference still applies even if the launcher rejects a swap.
+    } on MissingPluginException {
+      // Keeps settings usable on platforms without the native icon bridge.
     }
   }
 }
@@ -105,4 +138,15 @@ final accentColorIndexProvider =
     StateNotifierProvider<PersistedSettingNotifier<int>, int>(
       (ref) =>
           PersistedSettingNotifier(key: 'accentColorIndex', defaultValue: 0),
+    );
+
+final catalogLayoutProvider =
+    StateNotifierProvider<PersistedSettingNotifier<String>, String>(
+      (ref) =>
+          PersistedSettingNotifier(key: 'catalogLayout', defaultValue: 'grid'),
+    );
+
+final appIconStyleProvider =
+    StateNotifierProvider<PersistedSettingNotifier<String>, String>(
+      (ref) => AppIconStyleNotifier(),
     );

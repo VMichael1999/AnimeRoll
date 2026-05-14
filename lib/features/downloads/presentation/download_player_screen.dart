@@ -10,6 +10,7 @@ import 'package:video_player/video_player.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../shared/models/download_model.dart';
 import '../data/downloads_provider.dart';
+import '../../history/data/watch_history_provider.dart';
 
 class DownloadPlayerScreen extends ConsumerStatefulWidget {
   final String? downloadId;
@@ -41,6 +42,7 @@ class _DownloadPlayerScreenState extends ConsumerState<DownloadPlayerScreen> {
   late String _activePath;
   bool _hasStartedCurrentVideo = false;
   Timer? _hideControlsTimer;
+  DateTime? _lastHistorySaveAt;
 
   @override
   void initState() {
@@ -53,6 +55,7 @@ class _DownloadPlayerScreenState extends ConsumerState<DownloadPlayerScreen> {
   Future<void> _initialize(String path, {bool autoPlay = false}) async {
     _hideControlsTimer?.cancel();
     final previous = _controller;
+    _saveCurrentProgress(force: true);
     previous?.removeListener(_onVideoTick);
     setState(() {
       _controller = null;
@@ -70,7 +73,7 @@ class _DownloadPlayerScreenState extends ConsumerState<DownloadPlayerScreen> {
 
       await controller.initialize();
       await controller.setPlaybackSpeed(_speed);
-      await controller.seekTo(Duration.zero);
+      await _seekToSavedPosition(controller, path);
       await controller.pause();
       if (!mounted) {
         await controller.dispose();
@@ -87,12 +90,19 @@ class _DownloadPlayerScreenState extends ConsumerState<DownloadPlayerScreen> {
   }
 
   void _onVideoTick() {
+    final now = DateTime.now();
+    final last = _lastHistorySaveAt;
+    if (last == null || now.difference(last) >= const Duration(seconds: 10)) {
+      _lastHistorySaveAt = now;
+      _saveCurrentProgress();
+    }
     if (mounted) setState(() {});
   }
 
   @override
   void dispose() {
     _hideControlsTimer?.cancel();
+    _saveCurrentProgress(force: true);
     _controller?.removeListener(_onVideoTick);
     _controller?.dispose();
     _restorePortraitChrome();
@@ -221,9 +231,64 @@ class _DownloadPlayerScreenState extends ConsumerState<DownloadPlayerScreen> {
   Future<void> _openEpisode(DownloadModel episode) async {
     final path = episode.localPath;
     if (path == null || path.isEmpty || path == _currentPath) return;
+    _saveCurrentProgress(force: true);
     _activeDownloadId = episode.id;
     _activePath = path;
     await _initialize(path);
+  }
+
+  Future<void> _seekToSavedPosition(
+    VideoPlayerController controller,
+    String path,
+  ) async {
+    final key = _historyKey(path);
+    final entry = ref.read(watchHistoryProvider.notifier).find(key);
+    if (entry == null || entry.completed) {
+      await controller.seekTo(Duration.zero);
+      return;
+    }
+    final position = Duration(milliseconds: entry.positionMs);
+    final duration = controller.value.duration;
+    if (position < const Duration(seconds: 10) ||
+        duration <= Duration.zero ||
+        position >= duration - const Duration(seconds: 30)) {
+      await controller.seekTo(Duration.zero);
+      return;
+    }
+    await controller.seekTo(position);
+  }
+
+  void _saveCurrentProgress({bool force = false}) {
+    final controller = _controller;
+    if (controller == null || !controller.value.isInitialized) return;
+    if (!force &&
+        controller.value.position < const Duration(seconds: 5) &&
+        controller.value.duration > const Duration(minutes: 1)) {
+      return;
+    }
+
+    final current = _currentDownload(ref.read(downloadsProvider));
+    final key = current?.url.isNotEmpty == true ? current!.url : _activePath;
+    unawaited(
+      ref
+          .read(watchHistoryProvider.notifier)
+          .upsertProgress(
+            episodeUrl: key,
+            episodeTitle: current?.displayEpisodeTitle ?? widget.title,
+            animeTitle: current?.albumTitle ?? widget.animeTitle ?? 'AnimeRoll',
+            animeUrl: current?.animeUrl ?? '',
+            thumbnail: current?.thumbnail,
+            episodeNumber: current?.episodeNumber,
+            position: controller.value.position,
+            duration: controller.value.duration,
+            source: 'download',
+          ),
+    );
+  }
+
+  String _historyKey(String path) {
+    final current = _currentDownload(ref.read(downloadsProvider));
+    return current?.url.isNotEmpty == true ? current!.url : path;
   }
 
   String get _currentPath {
@@ -440,7 +505,7 @@ class _VideoPlaceholder extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return DecoratedBox(
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [Color(0xFF0A0A14), Color(0xFF12101E)],
           begin: Alignment.topLeft,
@@ -449,7 +514,7 @@ class _VideoPlaceholder extends StatelessWidget {
       ),
       child: Center(
         child: error == null
-            ? const CircularProgressIndicator(color: AppColors.accent2)
+            ? CircularProgressIndicator(color: AppColors.accent2)
             : const Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -510,7 +575,7 @@ class _VideoOverlay extends StatelessWidget {
     final buffered = _bufferedFraction(value);
 
     return DecoratedBox(
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
@@ -543,7 +608,7 @@ class _VideoOverlay extends StatelessWidget {
                         animeTitle,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: Colors.white,
                           fontSize: 14,
                           fontWeight: FontWeight.w800,
@@ -553,7 +618,7 @@ class _VideoOverlay extends StatelessWidget {
                         title,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: AppColors.accent2,
                           fontSize: 11,
                           fontWeight: FontWeight.w700,
@@ -574,7 +639,7 @@ class _VideoOverlay extends StatelessWidget {
                     ),
                     child: Text(
                       '${speed.toStringAsFixed(speed == speed.roundToDouble() ? 0 : 2)}x',
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: Colors.white,
                         fontSize: 11,
                         fontWeight: FontWeight.w800,
@@ -667,7 +732,7 @@ class _VideoOverlay extends StatelessWidget {
                               child: Container(
                                 height: 3,
                                 decoration: BoxDecoration(
-                                  gradient: const LinearGradient(
+                                  gradient: LinearGradient(
                                     colors: [
                                       AppColors.accent,
                                       AppColors.accent2,
@@ -684,7 +749,7 @@ class _VideoOverlay extends StatelessWidget {
                               child: Container(
                                 width: 10,
                                 height: 10,
-                                decoration: const BoxDecoration(
+                                decoration: BoxDecoration(
                                   color: Colors.white,
                                   shape: BoxShape.circle,
                                   boxShadow: [
@@ -706,7 +771,7 @@ class _VideoOverlay extends StatelessWidget {
                   children: [
                     Text(
                       _formatDuration(position),
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: Colors.white70,
                         fontSize: 11,
                         fontWeight: FontWeight.w700,
@@ -721,7 +786,7 @@ class _VideoOverlay extends StatelessWidget {
                     ),
                     Text(
                       _formatDuration(duration),
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: Colors.white54,
                         fontSize: 11,
                         fontWeight: FontWeight.w700,
@@ -732,7 +797,7 @@ class _VideoOverlay extends StatelessWidget {
                       tooltip: 'Pantalla completa',
                       visualDensity: VisualDensity.compact,
                       onPressed: ready ? onFullscreenTap : null,
-                      icon: const Icon(
+                      icon: Icon(
                         Icons.fullscreen_rounded,
                         color: Colors.white70,
                         size: 20,
@@ -855,7 +920,7 @@ class _InfoPanel extends StatelessWidget {
       children: [
         Text(
           animeTitle,
-          style: const TextStyle(
+          style: TextStyle(
             color: AppColors.textPrimary,
             fontSize: 17,
             fontWeight: FontWeight.w900,
@@ -866,7 +931,7 @@ class _InfoPanel extends StatelessWidget {
         const SizedBox(height: 4),
         Text(
           title,
-          style: const TextStyle(
+          style: TextStyle(
             color: AppColors.accent2,
             fontSize: 12,
             fontWeight: FontWeight.w700,
@@ -944,7 +1009,7 @@ class _InfoChip extends StatelessWidget {
           const SizedBox(width: 5),
           Text(
             label,
-            style: const TextStyle(
+            style: TextStyle(
               color: AppColors.textSecondary,
               fontSize: 11,
               fontWeight: FontWeight.w700,
@@ -994,7 +1059,7 @@ class _EpisodeTile extends StatelessWidget {
                     : Colors.white.withValues(alpha: 0.06),
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: const Icon(
+              child: Icon(
                 Icons.play_arrow_rounded,
                 color: Colors.white,
                 size: 22,
@@ -1017,7 +1082,7 @@ class _EpisodeTile extends StatelessWidget {
                   ),
                   Text(
                     '${episode.quality} - ${episode.variant}',
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: AppColors.textSecondary,
                       fontSize: 11,
                     ),

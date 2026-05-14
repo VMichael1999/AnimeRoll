@@ -6,7 +6,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../shared/models/download_model.dart';
 import '../data/downloads_provider.dart';
 
-enum _DownloadTab { saved, active, errors }
+enum _DownloadTab { active, saved, errors }
 
 class DownloadsScreen extends ConsumerStatefulWidget {
   const DownloadsScreen({super.key});
@@ -22,14 +22,37 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
   Widget build(BuildContext context) {
     final downloads = ref.watch(downloadsProvider);
     final albums = _DownloadAlbum.fromDownloads(downloads);
-    final active = downloads
-        .where((item) => item.isRunning || item.isLocalRunning)
-        .toList();
+    final active = downloads.where((item) => item.isActive).toList();
     final errors = downloads
         .where(
           (item) => item.status == 'failed' || item.localStatus == 'failed',
         )
         .toList();
+
+    if (_tab == _DownloadTab.saved) {
+      return Scaffold(
+        body: SafeArea(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _OfflineBanner(
+                onRetry: () => ref.read(downloadsProvider.notifier).refresh(),
+              ),
+              _OfflineLibraryHeader(albums: albums),
+              Expanded(
+                child: _AlbumLibrary(
+                  albums: albums,
+                  onOpenAlbum: (album) => _openAlbumPlayer(context, album),
+                  onDeleteAlbum: (album) => ref
+                      .read(downloadsProvider.notifier)
+                      .removeAlbum(album.key),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
 
     return Scaffold(
       body: SafeArea(
@@ -41,7 +64,8 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
               onRefresh: () => ref.read(downloadsProvider.notifier).refresh(),
             ),
             _DownloadStats(downloads: downloads),
-            const SizedBox(height: 12),
+            _StorageUsage(downloads: downloads),
+            const SizedBox(height: 10),
             _DownloadTabs(
               selected: _tab,
               onChanged: (tab) => setState(() => _tab = tab),
@@ -51,10 +75,14 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
                 _DownloadTab.saved => _AlbumLibrary(
                   albums: albums,
                   onOpenAlbum: (album) => _openAlbumPlayer(context, album),
+                  onDeleteAlbum: (album) => ref
+                      .read(downloadsProvider.notifier)
+                      .removeAlbum(album.key),
                 ),
                 _DownloadTab.active => _DownloadQueue(
                   downloads: active,
                   emptyText: 'No hay descargas en curso',
+                  showBatchActions: true,
                 ),
                 _DownloadTab.errors => _DownloadQueue(
                   downloads: errors,
@@ -86,7 +114,7 @@ class _DownloadsHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final active = downloads
-        .where((item) => item.isRunning || item.isLocalRunning)
+        .where((item) => item.isActive && !item.isPaused)
         .length;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
@@ -107,7 +135,7 @@ class _DownloadsHeader extends StatelessWidget {
               ),
               child: Text(
                 '$active activas',
-                style: const TextStyle(
+                style: TextStyle(
                   color: AppColors.accent2,
                   fontSize: 11,
                   fontWeight: FontWeight.w800,
@@ -117,7 +145,84 @@ class _DownloadsHeader extends StatelessWidget {
           IconButton(
             tooltip: 'Actualizar',
             onPressed: onRefresh,
-            icon: const Icon(Icons.refresh_rounded),
+            icon: Icon(Icons.more_vert_rounded),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _OfflineBanner extends StatelessWidget {
+  final VoidCallback onRetry;
+
+  const _OfflineBanner({required this.onRetry});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+      decoration: BoxDecoration(
+        color: AppColors.warning.withValues(alpha: 0.18),
+        border: Border(bottom: BorderSide(color: AppColors.warning)),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.wifi_off_rounded, color: AppColors.warning, size: 18),
+          const SizedBox(width: 10),
+          const Expanded(
+            child: Text(
+              'Sin conexión — Modo offline activo',
+              style: TextStyle(
+                color: AppColors.warning,
+                fontSize: 12,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ),
+          TextButton(
+            onPressed: onRetry,
+            child: const Text(
+              'Reintentar',
+              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w900),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _OfflineLibraryHeader extends StatelessWidget {
+  final List<_DownloadAlbum> albums;
+
+  const _OfflineLibraryHeader({required this.albums});
+
+  @override
+  Widget build(BuildContext context) {
+    final episodes = albums.fold<int>(
+      0,
+      (total, album) => total + album.items.length,
+    );
+    final bytes = albums.fold<int>(0, (total, album) => total + album.bytes);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Biblioteca offline',
+            style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            '${albums.length} series · $episodes episodios · ${_formatBytes(bytes)} usados',
+            style: TextStyle(
+              color: AppColors.textSecondary,
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+            ),
           ),
         ],
       ),
@@ -133,7 +238,7 @@ class _DownloadStats extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final active = downloads
-        .where((item) => item.isRunning || item.isLocalRunning)
+        .where((item) => item.isActive && !item.isPaused)
         .length;
     final saved = downloads.where((item) => item.isSavedOnDevice).length;
     final errors = downloads
@@ -175,6 +280,63 @@ class _DownloadStats extends StatelessWidget {
   }
 }
 
+class _StorageUsage extends StatelessWidget {
+  final List<DownloadModel> downloads;
+
+  const _StorageUsage({required this.downloads});
+
+  @override
+  Widget build(BuildContext context) {
+    final used = downloads
+        .where((item) => item.isSavedOnDevice || item.fileSize != null)
+        .fold<int>(0, (total, item) => total + _parseBytes(item.fileSize));
+    const total = 32 * 1024 * 1024 * 1024;
+    final percent = total == 0 ? 0.0 : (used / total).clamp(0.0, 1.0);
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  'Almacenamiento usado',
+                  style: TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              Text(
+                '${_formatBytes(used)} / ${_formatBytes(total)}',
+                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w900),
+              ),
+            ],
+          ),
+          const SizedBox(height: 7),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: percent,
+              minHeight: 6,
+              backgroundColor: AppColors.border,
+              valueColor: AlwaysStoppedAnimation(AppColors.accent2),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _StatCard extends StatelessWidget {
   final String value;
   final String label;
@@ -207,7 +369,7 @@ class _StatCard extends StatelessWidget {
           ),
           Text(
             label.toUpperCase(),
-            style: const TextStyle(
+            style: TextStyle(
               color: AppColors.textSecondary,
               fontSize: 9,
               fontWeight: FontWeight.w700,
@@ -232,14 +394,14 @@ class _DownloadTabs extends StatelessWidget {
       child: Row(
         children: [
           _TabButton(
-            label: 'Guardados',
-            active: selected == _DownloadTab.saved,
-            onTap: () => onChanged(_DownloadTab.saved),
-          ),
-          _TabButton(
             label: 'En curso',
             active: selected == _DownloadTab.active,
             onTap: () => onChanged(_DownloadTab.active),
+          ),
+          _TabButton(
+            label: 'Guardados',
+            active: selected == _DownloadTab.saved,
+            onTap: () => onChanged(_DownloadTab.saved),
           ),
           _TabButton(
             label: 'Errores',
@@ -296,24 +458,25 @@ class _TabButton extends StatelessWidget {
 class _AlbumLibrary extends StatelessWidget {
   final List<_DownloadAlbum> albums;
   final ValueChanged<_DownloadAlbum> onOpenAlbum;
+  final ValueChanged<_DownloadAlbum> onDeleteAlbum;
 
-  const _AlbumLibrary({required this.albums, required this.onOpenAlbum});
+  const _AlbumLibrary({
+    required this.albums,
+    required this.onOpenAlbum,
+    required this.onDeleteAlbum,
+  });
 
   @override
   Widget build(BuildContext context) {
     if (albums.isEmpty) return const _EmptyDownloads();
-    return GridView.builder(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        childAspectRatio: 0.66,
-        crossAxisSpacing: 14,
-        mainAxisSpacing: 16,
-      ),
+    return ListView.separated(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 18),
       itemCount: albums.length,
+      separatorBuilder: (_, _) => const SizedBox(height: 10),
       itemBuilder: (context, index) => _AlbumCard(
         album: albums[index],
         onTap: () => onOpenAlbum(albums[index]),
+        onDelete: () => onDeleteAlbum(albums[index]),
       ),
     );
   }
@@ -322,8 +485,13 @@ class _AlbumLibrary extends StatelessWidget {
 class _DownloadQueue extends StatelessWidget {
   final List<DownloadModel> downloads;
   final String emptyText;
+  final bool showBatchActions;
 
-  const _DownloadQueue({required this.downloads, required this.emptyText});
+  const _DownloadQueue({
+    required this.downloads,
+    required this.emptyText,
+    this.showBatchActions = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -331,32 +499,84 @@ class _DownloadQueue extends StatelessWidget {
       return Center(
         child: Text(
           emptyText,
-          style: const TextStyle(color: AppColors.textSecondary),
+          style: TextStyle(color: AppColors.textSecondary),
         ),
       );
     }
     return ListView.separated(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
-      itemCount: downloads.length,
-      separatorBuilder: (context, _) => const SizedBox(height: 8),
-      itemBuilder: (context, index) =>
-          _DownloadQueueTile(download: downloads[index]),
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      itemCount: downloads.length + (showBatchActions ? 1 : 0),
+      separatorBuilder: (context, index) => index == 0 && showBatchActions
+          ? const SizedBox.shrink()
+          : const SizedBox(height: 8),
+      itemBuilder: (context, index) {
+        if (showBatchActions && index == 0) {
+          return _BatchActions(activeCount: downloads.length);
+        }
+        final item = downloads[index - (showBatchActions ? 1 : 0)];
+        return _DownloadQueueTile(download: item);
+      },
     );
   }
 }
 
-class _DownloadQueueTile extends StatelessWidget {
+class _BatchActions extends ConsumerWidget {
+  final int activeCount;
+
+  const _BatchActions({required this.activeCount});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Container(
+      margin: const EdgeInsets.only(top: 10),
+      padding: const EdgeInsets.fromLTRB(0, 8, 0, 8),
+      decoration: BoxDecoration(
+        color: Color(0x241A0B30),
+        border: Border(bottom: BorderSide(color: AppColors.border)),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              '$activeCount descargas activas',
+              style: TextStyle(
+                color: AppColors.accent2,
+                fontSize: 11,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ),
+          _QueueButton(
+            label: 'Pausar todo',
+            icon: Icons.pause_rounded,
+            color: AppColors.warning,
+            onPressed: () => ref.read(downloadsProvider.notifier).pauseAll(),
+          ),
+          const SizedBox(width: 6),
+          _QueueButton(
+            label: 'Cancelar',
+            icon: Icons.close_rounded,
+            color: AppColors.error,
+            onPressed: () =>
+                ref.read(downloadsProvider.notifier).cancelActive(),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DownloadQueueTile extends ConsumerWidget {
   final DownloadModel download;
 
   const _DownloadQueueTile({required this.download});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final failed =
         download.status == 'failed' || download.localStatus == 'failed';
-    final progress = download.localStatus == 'saving'
-        ? download.localProgress
-        : download.progress;
+    final progress = download.effectiveProgress;
+    final paused = download.isPaused;
 
     return Container(
       padding: const EdgeInsets.all(10),
@@ -373,7 +593,7 @@ class _DownloadQueueTile extends StatelessWidget {
                 borderRadius: BorderRadius.circular(6),
                 child: SizedBox(
                   width: 64,
-                  height: 40,
+                  height: 50,
                   child: _CoverImage(url: download.thumbnail),
                 ),
               ),
@@ -386,15 +606,13 @@ class _DownloadQueueTile extends StatelessWidget {
                       download.displayEpisodeTitle,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w800,
                       ),
                     ),
                     Text(
-                      failed
-                          ? download.error ?? 'Error desconocido'
-                          : '${download.quality} - ${download.variant}',
+                      _subtitle(download, failed, paused),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
@@ -407,17 +625,70 @@ class _DownloadQueueTile extends StatelessWidget {
                   ],
                 ),
               ),
+              if (!failed)
+                _IconMiniButton(
+                  tooltip: paused ? 'Reanudar' : 'Pausar',
+                  icon: paused ? Icons.play_arrow_rounded : Icons.pause_rounded,
+                  color: AppColors.warning,
+                  onPressed: () {
+                    final notifier = ref.read(downloadsProvider.notifier);
+                    paused
+                        ? notifier.resumeDownload(download.id)
+                        : notifier.pauseDownload(download.id);
+                  },
+                ),
+              const SizedBox(width: 6),
+              _IconMiniButton(
+                tooltip: 'Eliminar',
+                icon: Icons.delete_rounded,
+                color: AppColors.error,
+                onPressed: () => ref
+                    .read(downloadsProvider.notifier)
+                    .removeDownload(download.id),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  failed
+                      ? 'Error'
+                      : paused
+                      ? 'Pausado'
+                      : _speedLabel(download),
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: failed
+                        ? AppColors.error
+                        : paused
+                        ? AppColors.warning
+                        : AppColors.accent2,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
               Text(
-                failed ? 'Error' : '$progress%',
+                failed ? '' : '$progress%',
                 style: TextStyle(
-                  fontSize: 11,
-                  color: failed ? AppColors.error : AppColors.accent2,
+                  color: AppColors.textSecondary,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Text(
+                failed || paused ? '' : _etaLabel(download),
+                style: TextStyle(
+                  color: AppColors.success,
+                  fontSize: 10,
                   fontWeight: FontWeight.w800,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 4),
           ClipRRect(
             borderRadius: BorderRadius.circular(3),
             child: LinearProgressIndicator(
@@ -433,64 +704,289 @@ class _DownloadQueueTile extends StatelessWidget {
       ),
     );
   }
+
+  String _subtitle(DownloadModel item, bool failed, bool paused) {
+    if (failed) return item.error ?? 'Error desconocido';
+    final status = paused
+        ? 'Pausado'
+        : item.status == 'queued'
+        ? 'En cola'
+        : item.localStatus == 'saving'
+        ? 'Guardando'
+        : item.phase == 'finalizing'
+        ? 'Finalizando'
+        : item.currentServer ?? item.phase ?? item.status;
+    final size = _formatBytes(_parseBytes(item.fileSize));
+    return '${item.quality} · ${item.variant} · $size · $status';
+  }
+
+  String _speedLabel(DownloadModel item) {
+    if (item.phase == 'finalizing') return 'Finalizando';
+    if (item.speedBytesPerSecond != null && item.speedBytesPerSecond! > 0) {
+      return '${_formatBytes(item.speedBytesPerSecond!)}/s';
+    }
+    final updated = _parseEpochOrIso(item.updatedAt);
+    final created =
+        _parseEpochOrIso(item.transferStartedAt) ??
+        _parseEpochOrIso(item.startedAt) ??
+        _parseEpochOrIso(item.createdAt);
+    if (updated == null || created == null || item.downloadedBytes <= 0) {
+      return item.status == 'queued' ? 'En cola' : 'Resolviendo';
+    }
+    final seconds = updated.difference(created).inSeconds;
+    if (seconds <= 0) return 'Resolviendo';
+    return '${_formatBytes(item.downloadedBytes ~/ seconds)}/s';
+  }
+
+  String _etaLabel(DownloadModel item) {
+    if (item.phase == 'finalizing') return '~finalizando';
+    if (item.etaSeconds != null && item.etaSeconds! > 0) {
+      return '~${item.etaSeconds}s restantes';
+    }
+    final total = item.totalBytes ?? _parseBytes(item.fileSize);
+    if (total <= 0 || item.downloadedBytes <= 0) return '';
+    final updated = _parseEpochOrIso(item.updatedAt);
+    final created =
+        _parseEpochOrIso(item.transferStartedAt) ??
+        _parseEpochOrIso(item.startedAt) ??
+        _parseEpochOrIso(item.createdAt);
+    if (updated == null || created == null) return '';
+    final seconds = updated.difference(created).inSeconds;
+    if (seconds <= 0) return '';
+    final bytesPerSecond = item.downloadedBytes / seconds;
+    if (bytesPerSecond <= 0) return '';
+    final remaining = ((total - item.downloadedBytes) / bytesPerSecond).ceil();
+    if (remaining <= 0) return '';
+    return '~${remaining}s restantes';
+  }
+}
+
+class _IconMiniButton extends StatelessWidget {
+  final String tooltip;
+  final IconData icon;
+  final Color color;
+  final VoidCallback onPressed;
+
+  const _IconMiniButton({
+    required this.tooltip,
+    required this.icon,
+    required this.color,
+    required this.onPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: InkWell(
+        onTap: onPressed,
+        borderRadius: BorderRadius.circular(6),
+        child: Container(
+          width: 28,
+          height: 28,
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.18),
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: Icon(icon, color: color, size: 17),
+        ),
+      ),
+    );
+  }
+}
+
+class _QueueButton extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final Color color;
+  final VoidCallback onPressed;
+
+  const _QueueButton({
+    required this.label,
+    required this.icon,
+    required this.color,
+    required this.onPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return FilledButton.icon(
+      onPressed: onPressed,
+      icon: Icon(icon, size: 13),
+      label: Text(label),
+      style: FilledButton.styleFrom(
+        backgroundColor: color,
+        foregroundColor: Colors.white,
+        minimumSize: const Size(0, 30),
+        padding: const EdgeInsets.symmetric(horizontal: 9),
+        textStyle: const TextStyle(fontSize: 10, fontWeight: FontWeight.w900),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(7)),
+      ),
+    );
+  }
 }
 
 class _AlbumCard extends StatelessWidget {
   final _DownloadAlbum album;
   final VoidCallback onTap;
+  final VoidCallback onDelete;
 
-  const _AlbumCard({required this.album, required this.onTap});
+  const _AlbumCard({
+    required this.album,
+    required this.onTap,
+    required this.onDelete,
+  });
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: Stack(
-              children: [
-                Positioned.fill(
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: _CoverImage(url: album.cover),
-                  ),
-                ),
-                Positioned(
-                  left: 0,
-                  bottom: 0,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 5,
-                    ),
-                    decoration: const BoxDecoration(
-                      color: AppColors.surface2,
-                      borderRadius: BorderRadius.only(
-                        topRight: Radius.circular(6),
-                      ),
-                    ),
-                    child: Text(
-                      '${album.savedCount}/${album.items.length}',
-                      style: const TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w800,
-                      ),
+      child: Container(
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(9),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(10),
+              child: Row(
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(7),
+                    child: SizedBox(
+                      width: 62,
+                      height: 78,
+                      child: _CoverImage(url: album.cover),
                     ),
                   ),
-                ),
-              ],
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: SizedBox(
+                      height: 78,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            album.title,
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w900,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            album.subtitle,
+                            style: const TextStyle(
+                              color: AppColors.textSecondary,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Wrap(
+                            spacing: 6,
+                            runSpacing: 5,
+                            children:
+                                album.items
+                                    .take(4)
+                                    .map(
+                                      (item) => _EpisodePill(
+                                        label: item.episodeNumber == null
+                                            ? item.displayEpisodeTitle
+                                            : 'Ep. ${item.episodeNumber}',
+                                      ),
+                                    )
+                                    .toList()
+                                  ..addAll(
+                                    album.items.length > 4
+                                        ? [
+                                            _EpisodePill(
+                                              label:
+                                                  '+${album.items.length - 4}',
+                                            ),
+                                          ]
+                                        : const [],
+                                  ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            album.title,
-            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800),
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ],
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+              decoration: BoxDecoration(
+                color: AppColors.surface2,
+                borderRadius: const BorderRadius.vertical(
+                  bottom: Radius.circular(9),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Text(
+                    '${album.items.length} episodios',
+                    style: const TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const Spacer(),
+                  Text(
+                    _formatBytes(album.bytes),
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const Spacer(),
+                  GestureDetector(
+                    onTap: onDelete,
+                    child: const Text(
+                      'Eliminar',
+                      style: TextStyle(
+                        color: AppColors.error,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _EpisodePill extends StatelessWidget {
+  final String label;
+
+  const _EpisodePill({required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: AppColors.accent.withValues(alpha: 0.22),
+        borderRadius: BorderRadius.circular(5),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: AppColors.accent2,
+          fontSize: 10,
+          fontWeight: FontWeight.w900,
+        ),
       ),
     );
   }
@@ -510,8 +1006,7 @@ class _CoverImage extends StatelessWidget {
       width: double.infinity,
       height: double.infinity,
       errorWidget: (context, url, error) => const _DownloadPlaceholder(),
-      placeholder: (context, url) =>
-          const ColoredBox(color: AppColors.surface2),
+      placeholder: (context, url) => ColoredBox(color: AppColors.surface2),
     );
   }
 }
@@ -521,7 +1016,7 @@ class _DownloadPlaceholder extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const ColoredBox(
+    return ColoredBox(
       color: AppColors.surface2,
       child: Center(
         child: Icon(Icons.video_library_rounded, color: AppColors.border),
@@ -545,12 +1040,20 @@ class _DownloadAlbum {
 
   int get savedCount => items.where((item) => item.isSavedOnDevice).length;
 
+  int get bytes =>
+      items.fold<int>(0, (total, item) => total + _parseBytes(item.fileSize));
+
+  String get subtitle {
+    final first = items.first;
+    return '${first.quality} ${first.variant}';
+  }
+
   DownloadModel? get firstPlayable =>
       items.where((item) => item.isSavedOnDevice).firstOrNull;
 
   static List<_DownloadAlbum> fromDownloads(List<DownloadModel> downloads) {
     final grouped = <String, List<DownloadModel>>{};
-    for (final download in downloads) {
+    for (final download in downloads.where((item) => item.isSavedOnDevice)) {
       grouped.putIfAbsent(download.albumKey, () => []).add(download);
     }
 
@@ -600,4 +1103,39 @@ class _EmptyDownloads extends StatelessWidget {
       ),
     );
   }
+}
+
+int _parseBytes(String? value) {
+  if (value == null || value.trim().isEmpty) return 0;
+  final raw = value.trim().toLowerCase();
+  final direct = int.tryParse(raw);
+  if (direct != null) return direct;
+
+  final match = RegExp(r'([\d.]+)\s*(kb|mb|gb|tb)').firstMatch(raw);
+  if (match == null) return 0;
+  final amount = double.tryParse(match.group(1) ?? '') ?? 0;
+  final unit = match.group(2);
+  final multiplier = switch (unit) {
+    'kb' => 1024,
+    'mb' => 1024 * 1024,
+    'gb' => 1024 * 1024 * 1024,
+    'tb' => 1024 * 1024 * 1024 * 1024,
+    _ => 1,
+  };
+  return (amount * multiplier).round();
+}
+
+String _formatBytes(int bytes) {
+  if (bytes <= 0) return '0 MB';
+  const gb = 1024 * 1024 * 1024;
+  const mb = 1024 * 1024;
+  if (bytes >= gb) return '${(bytes / gb).toStringAsFixed(1)} GB';
+  return '${(bytes / mb).clamp(0.1, double.infinity).toStringAsFixed(1)} MB';
+}
+
+DateTime? _parseEpochOrIso(String? value) {
+  if (value == null || value.isEmpty) return null;
+  final millis = int.tryParse(value);
+  if (millis != null) return DateTime.fromMillisecondsSinceEpoch(millis);
+  return DateTime.tryParse(value);
 }

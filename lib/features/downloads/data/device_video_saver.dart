@@ -28,6 +28,7 @@ class DeviceVideoSaver {
         onProgress(((received / total) * 100).round().clamp(0, 100));
       },
     );
+    onProgress(100);
 
     if (Platform.isAndroid) {
       final savedPath = await _channel.invokeMethod<String>('saveVideo', {

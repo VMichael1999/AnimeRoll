@@ -6,7 +6,12 @@ class SectionHeader extends StatelessWidget {
   final String? action;
   final VoidCallback? onAction;
 
-  const SectionHeader({super.key, required this.title, this.action, this.onAction});
+  const SectionHeader({
+    super.key,
+    required this.title,
+    this.action,
+    this.onAction,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -15,13 +20,16 @@ class SectionHeader extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(title, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
+          Text(
+            title,
+            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+          ),
           if (action != null)
             GestureDetector(
               onTap: onAction,
               child: Text(
                 action!,
-                style: const TextStyle(fontSize: 11, color: AppColors.accent2),
+                style: TextStyle(fontSize: 11, color: AppColors.accent2),
               ),
             ),
         ],

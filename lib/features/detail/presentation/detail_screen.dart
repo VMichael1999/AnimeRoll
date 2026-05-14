@@ -75,7 +75,7 @@ class _DetailAppBar extends StatelessWidget {
       pinned: true,
       backgroundColor: AppColors.bg,
       leading: IconButton(
-        icon: const Icon(Icons.arrow_back_ios_new_rounded),
+        icon: Icon(Icons.arrow_back_ios_new_rounded),
         onPressed: () => context.pop(),
       ),
       flexibleSpace: FlexibleSpaceBar(
@@ -87,9 +87,9 @@ class _DetailAppBar extends StatelessWidget {
                 imageUrl: anime.cover!,
                 fit: BoxFit.cover,
                 placeholder: (context, _) =>
-                    const ColoredBox(color: AppColors.surface2),
+                    ColoredBox(color: AppColors.surface2),
                 errorWidget: (context, url, _) =>
-                    const ColoredBox(color: AppColors.surface2),
+                    ColoredBox(color: AppColors.surface2),
               ),
             Container(
               decoration: BoxDecoration(
@@ -154,7 +154,7 @@ class _DetailInfo extends ConsumerWidget {
                   children: [
                     Text(
                       anime.title,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w800,
                       ),
@@ -168,7 +168,7 @@ class _DetailInfo extends ConsumerWidget {
                         if (anime.episodeCount != null)
                           '${anime.episodeCount} eps',
                       ].join(' · '),
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 10,
                         color: AppColors.textSecondary,
                       ),
@@ -184,7 +184,7 @@ class _DetailInfo extends ConsumerWidget {
           if (anime.synopsis != null) ...[
             Text(
               anime.synopsis!,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 11,
                 color: AppColors.textSecondary,
                 height: 1.6,
@@ -218,7 +218,7 @@ class _DetailInfo extends ConsumerWidget {
                       : () => context.push(
                           '/player?url=${Uri.encodeComponent(firstEpisode.url)}&title=${Uri.encodeComponent(firstEpisode.title)}&animeUrl=${Uri.encodeComponent(anime.url)}',
                         ),
-                  icon: const Icon(Icons.play_arrow_rounded, size: 18),
+                  icon: Icon(Icons.play_arrow_rounded, size: 18),
                   label: const Text(
                     'Ver ahora',
                     style: TextStyle(fontWeight: FontWeight.w700),
@@ -236,16 +236,9 @@ class _DetailInfo extends ConsumerWidget {
               const SizedBox(width: 8),
               _IconAction(
                 icon: Icons.download_rounded,
-                onTap: firstEpisode == null
-                    ? null
-                    : () => _downloadEpisode(context, ref, firstEpisode),
-              ),
-              const SizedBox(width: 8),
-              _IconAction(
-                icon: Icons.playlist_add_check_rounded,
                 onTap: episodes.isEmpty
                     ? null
-                    : () => _downloadBatch(context, ref, episodes),
+                    : () => _showBatchDownloadSheet(context, ref, episodes),
               ),
             ],
           ),
@@ -254,52 +247,83 @@ class _DetailInfo extends ConsumerWidget {
     );
   }
 
-  Future<void> _downloadEpisode(
+  Future<void> _showBatchDownloadSheet(
     BuildContext context,
     WidgetRef ref,
-    EpisodeModel episode,
+    List<EpisodeModel> episodes,
   ) async {
-    try {
-      await ref
-          .read(downloadsProvider.notifier)
-          .startEpisode(
-            episodeUrl: episode.url,
-            title: '${anime.title} · ${episode.title}',
-            thumbnail: episode.thumbnail ?? anime.cover,
-            animeTitle: anime.title,
-            animeUrl: anime.url,
-            episodeTitle: episode.title,
-            episodeNumber: episode.number,
-            quality: ref.read(qualityPrefProvider),
-            variant: ref.read(variantPrefProvider),
-            preferredServer: anime.url.contains('hentaila.com')
-                ? 'VIP'
-                : 'yourupload',
-          );
-      if (context.mounted) {
-        AppToast.show(
-          context,
-          message: 'Descarga agregada',
-          type: AppToastType.success,
-        );
-      }
-    } catch (error) {
-      if (context.mounted) {
-        AppToast.show(
-          context,
-          message: 'No se pudo iniciar la descarga',
-          type: AppToastType.error,
-        );
-      }
-    }
+    final options = [
+      1,
+      3,
+      5,
+      10,
+    ].where((count) => count <= episodes.length).toList(growable: false);
+    final counts = options.isEmpty ? [episodes.length] : options;
+
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 18),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 36,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: AppColors.border,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Descarga masiva',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Elige cuántos episodios agregar a la cola.',
+                style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+              ),
+              const SizedBox(height: 14),
+              Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: counts
+                    .map(
+                      (count) => _BatchDownloadOption(
+                        count: count,
+                        onTap: () {
+                          Navigator.pop(sheetContext);
+                          _downloadBatch(context, ref, episodes, count);
+                        },
+                      ),
+                    )
+                    .toList(),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _downloadBatch(
     BuildContext context,
     WidgetRef ref,
     List<EpisodeModel> episodes,
+    int count,
   ) async {
     final episodeNumbers = episodes
+        .take(count)
         .map((episode) => episode.number)
         .whereType<int>()
         .toList();
@@ -342,6 +366,51 @@ class _DetailInfo extends ConsumerWidget {
   }
 }
 
+class _BatchDownloadOption extends StatelessWidget {
+  final int count;
+  final VoidCallback onTap;
+
+  const _BatchDownloadOption({required this.count, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(10),
+      onTap: onTap,
+      child: Container(
+        width: 74,
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        decoration: BoxDecoration(
+          color: AppColors.surface2,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: Column(
+          children: [
+            Text(
+              '$count',
+              style: TextStyle(
+                color: AppColors.accent2,
+                fontSize: 18,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+            const SizedBox(height: 3),
+            const Text(
+              'eps',
+              style: TextStyle(
+                color: AppColors.textSecondary,
+                fontSize: 11,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _StatsRow extends StatelessWidget {
   final AnimeModel anime;
   const _StatsRow({required this.anime});
@@ -376,7 +445,7 @@ class _Stat extends StatelessWidget {
       children: [
         Text(
           value,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.w700,
             color: AppColors.accent2,
@@ -384,7 +453,7 @@ class _Stat extends StatelessWidget {
         ),
         Text(
           label,
-          style: const TextStyle(fontSize: 9, color: AppColors.textSecondary),
+          style: TextStyle(fontSize: 9, color: AppColors.textSecondary),
         ),
       ],
     );
@@ -406,7 +475,7 @@ class _GenreTag extends StatelessWidget {
       ),
       child: Text(
         label,
-        style: const TextStyle(fontSize: 10, color: AppColors.textSecondary),
+        style: TextStyle(fontSize: 10, color: AppColors.textSecondary),
       ),
     );
   }
@@ -612,7 +681,7 @@ class _EpisodeItem extends StatelessWidget {
                         errorWidget: (context, url, _) =>
                             const _ImagePlaceholder(iconSize: 18),
                       )
-                    : const Icon(
+                    : Icon(
                         Icons.play_circle_outline,
                         color: AppColors.textSecondary,
                       ),
@@ -625,15 +694,12 @@ class _EpisodeItem extends StatelessWidget {
                 children: [
                   Text(
                     episode.title,
-                    style: const TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                    ),
+                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
                   ),
                   if (episode.duration != null)
                     Text(
                       episode.duration!,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 10,
                         color: AppColors.textSecondary,
                       ),
@@ -644,7 +710,7 @@ class _EpisodeItem extends StatelessWidget {
             IconButton(
               tooltip: 'Descargar episodio',
               onPressed: onDownload,
-              icon: const Icon(
+              icon: Icon(
                 Icons.download_rounded,
                 color: AppColors.accent2,
                 size: 19,
@@ -655,7 +721,7 @@ class _EpisodeItem extends StatelessWidget {
             IconButton(
               tooltip: 'Reproducir episodio',
               onPressed: onTap,
-              icon: const Icon(
+              icon: Icon(
                 Icons.play_arrow_rounded,
                 color: AppColors.textSecondary,
                 size: 21,
@@ -777,7 +843,7 @@ class _RelatedTitle extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(
       title,
-      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
+      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
     );
   }
 }
@@ -828,20 +894,16 @@ class _RelatedCard extends StatelessWidget {
               anime.title,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w800),
+              style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800),
             ),
             if (anime.score != null)
               Row(
                 children: [
-                  const Icon(
-                    Icons.star_rounded,
-                    size: 12,
-                    color: AppColors.warning,
-                  ),
+                  Icon(Icons.star_rounded, size: 12, color: AppColors.warning),
                   const SizedBox(width: 2),
                   Text(
                     anime.score!.toStringAsFixed(1),
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 10,
                       color: AppColors.warning,
                       fontWeight: FontWeight.w800,
@@ -894,10 +956,7 @@ class _RecommendationTile extends StatelessWidget {
                     anime.title,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w800,
-                    ),
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800),
                   ),
                   if (anime.genres.isNotEmpty) ...[
                     const SizedBox(height: 5),
@@ -915,7 +974,7 @@ class _RecommendationTile extends StatelessWidget {
                     reason,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 10,
                       color: AppColors.textSecondary,
                     ),
@@ -923,10 +982,7 @@ class _RecommendationTile extends StatelessWidget {
                 ],
               ),
             ),
-            const Icon(
-              Icons.chevron_right_rounded,
-              color: AppColors.textSecondary,
-            ),
+            Icon(Icons.chevron_right_rounded, color: AppColors.textSecondary),
           ],
         ),
       ),

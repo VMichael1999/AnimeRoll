@@ -69,7 +69,7 @@ class _Thumbnail extends StatelessWidget {
                     imageUrl: cover!,
                     fit: BoxFit.cover,
                     placeholder: (context, _) =>
-                        const ColoredBox(color: AppColors.surface2),
+                        ColoredBox(color: AppColors.surface2),
                     errorWidget: (context, url, _) => const _PlaceholderThumb(),
                   )
                 : const _PlaceholderThumb(),
@@ -101,7 +101,7 @@ class _PlaceholderThumb extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const ColoredBox(
+    return ColoredBox(
       color: AppColors.surface2,
       child: Center(
         child: Icon(Icons.movie_outlined, color: AppColors.border, size: 28),

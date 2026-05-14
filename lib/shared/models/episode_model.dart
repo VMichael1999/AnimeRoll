@@ -28,12 +28,14 @@ class EpisodeModel {
 class VideoServerModel {
   final String name;
   final String url;
+  final String variant;
   final String? quality;
   final bool isHls;
 
   const VideoServerModel({
     required this.name,
     required this.url,
+    this.variant = 'SUB',
     this.quality,
     this.isHls = false,
   });
@@ -42,6 +44,7 @@ class VideoServerModel {
       VideoServerModel(
         name: json['server'] as String? ?? json['name'] as String? ?? '',
         url: json['url'] as String? ?? '',
+        variant: json['variant'] as String? ?? 'SUB',
         quality: json['quality'] as String?,
         isHls:
             json['isHls'] as bool? ??

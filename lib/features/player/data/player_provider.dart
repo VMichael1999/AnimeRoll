@@ -34,6 +34,7 @@ int _serverScore(VideoServerModel server, String preferredServer) {
   final preferred = preferredServer.toLowerCase();
   var score = 0;
 
+  if (name == 'hls' || name.contains('hls')) score += 500;
   if (preferred.isNotEmpty && name.contains(preferred)) score += 200;
   if (_isDirectVideoUrl(url)) score += 100;
   if (server.isHls || url.contains('.m3u8')) score += 30;

@@ -52,6 +52,7 @@ class _DetailBody extends StatelessWidget {
             episodes: episodes,
             fallbackThumbnail: anime.cover,
             animeTitle: anime.title,
+            animeUrl: anime.url,
           ),
         ),
         const SliverToBoxAdapter(child: SizedBox(height: 24)),
@@ -121,16 +122,23 @@ class _DetailInfo extends ConsumerWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              if (anime.cover != null)
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(10),
-                  child: CachedNetworkImage(
-                    imageUrl: anime.cover!,
-                    width: 70,
-                    height: 98,
-                    fit: BoxFit.cover,
-                  ),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: SizedBox(
+                  width: 70,
+                  height: 98,
+                  child: anime.cover != null
+                      ? CachedNetworkImage(
+                          imageUrl: anime.cover!,
+                          fit: BoxFit.cover,
+                          placeholder: (context, _) =>
+                              const _ImagePlaceholder(iconSize: 22),
+                          errorWidget: (context, url, _) =>
+                              const _ImagePlaceholder(iconSize: 22),
+                        )
+                      : const _ImagePlaceholder(iconSize: 22),
                 ),
+              ),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
@@ -200,7 +208,7 @@ class _DetailInfo extends ConsumerWidget {
                   onPressed: firstEpisode == null
                       ? null
                       : () => context.push(
-                          '/player?url=${Uri.encodeComponent(firstEpisode.url)}&title=${Uri.encodeComponent(firstEpisode.title)}',
+                          '/player?url=${Uri.encodeComponent(firstEpisode.url)}&title=${Uri.encodeComponent(firstEpisode.title)}&animeUrl=${Uri.encodeComponent(anime.url)}',
                         ),
                   icon: const Icon(Icons.play_arrow_rounded, size: 18),
                   label: const Text(
@@ -401,10 +409,12 @@ class _EpisodeSection extends StatelessWidget {
   final List<EpisodeModel> episodes;
   final String? fallbackThumbnail;
   final String animeTitle;
+  final String animeUrl;
 
   const _EpisodeSection({
     required this.episodes,
     required this.animeTitle,
+    required this.animeUrl,
     this.fallbackThumbnail,
   });
 
@@ -432,6 +442,7 @@ class _EpisodeSection extends StatelessWidget {
           _EpisodeList(
             episodes: episodes,
             animeTitle: animeTitle,
+            animeUrl: animeUrl,
             fallbackThumbnail: fallbackThumbnail,
           ),
       ],
@@ -443,10 +454,12 @@ class _EpisodeList extends ConsumerWidget {
   final List<EpisodeModel> episodes;
   final String? fallbackThumbnail;
   final String animeTitle;
+  final String animeUrl;
 
   const _EpisodeList({
     required this.episodes,
     required this.animeTitle,
+    required this.animeUrl,
     this.fallbackThumbnail,
   });
 
@@ -462,7 +475,7 @@ class _EpisodeList extends ConsumerWidget {
         episode: episodes[i],
         fallbackThumbnail: fallbackThumbnail,
         onTap: () => context.push(
-          '/player?url=${Uri.encodeComponent(episodes[i].url)}&title=${Uri.encodeComponent(episodes[i].title)}',
+          '/player?url=${Uri.encodeComponent(episodes[i].url)}&title=${Uri.encodeComponent(episodes[i].title)}&animeUrl=${Uri.encodeComponent(animeUrl)}',
         ),
         onDownload: () => _downloadEpisode(context, ref, episodes[i]),
       ),
@@ -535,7 +548,16 @@ class _EpisodeItem extends StatelessWidget {
                 height: 38,
                 color: AppColors.border,
                 child: thumbnail != null
-                    ? CachedNetworkImage(imageUrl: thumbnail, fit: BoxFit.cover)
+                    ? CachedNetworkImage(
+                        imageUrl: thumbnail,
+                        fit: BoxFit.cover,
+                        width: double.infinity,
+                        height: double.infinity,
+                        placeholder: (context, _) =>
+                            const _ImagePlaceholder(iconSize: 18),
+                        errorWidget: (context, url, _) =>
+                            const _ImagePlaceholder(iconSize: 18),
+                      )
                     : const Icon(
                         Icons.play_circle_outline,
                         color: AppColors.textSecondary,
@@ -588,6 +610,26 @@ class _EpisodeItem extends StatelessWidget {
               padding: EdgeInsets.zero,
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ImagePlaceholder extends StatelessWidget {
+  final double iconSize;
+
+  const _ImagePlaceholder({required this.iconSize});
+
+  @override
+  Widget build(BuildContext context) {
+    return ColoredBox(
+      color: AppColors.surface2,
+      child: Center(
+        child: Icon(
+          Icons.image_not_supported_outlined,
+          color: AppColors.textSecondary,
+          size: iconSize,
         ),
       ),
     );

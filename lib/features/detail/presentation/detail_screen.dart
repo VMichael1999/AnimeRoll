@@ -8,6 +8,7 @@ import '../../../shared/models/episode_model.dart';
 import '../../../shared/widgets/error_view.dart';
 import '../data/detail_provider.dart';
 import '../../downloads/data/downloads_provider.dart';
+import '../../favorites/data/favorites_provider.dart';
 import '../../settings/data/settings_provider.dart';
 
 class DetailScreen extends ConsumerWidget {
@@ -113,6 +114,11 @@ class _DetailInfo extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final firstEpisode = episodes.firstOrNull;
+    final isFavorite = ref.watch(
+      favoritesProvider.select(
+        (items) => items.any((item) => item.url == anime.url),
+      ),
+    );
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
@@ -216,6 +222,14 @@ class _DetailInfo extends ConsumerWidget {
                     style: TextStyle(fontWeight: FontWeight.w700),
                   ),
                 ),
+              ),
+              const SizedBox(width: 8),
+              _IconAction(
+                icon: isFavorite
+                    ? Icons.favorite_rounded
+                    : Icons.favorite_border_rounded,
+                active: isFavorite,
+                onTap: () => ref.read(favoritesProvider.notifier).toggle(anime),
               ),
               const SizedBox(width: 8),
               _IconAction(
@@ -383,7 +397,13 @@ class _GenreTag extends StatelessWidget {
 class _IconAction extends StatelessWidget {
   final IconData icon;
   final VoidCallback? onTap;
-  const _IconAction({required this.icon, required this.onTap});
+  final bool active;
+
+  const _IconAction({
+    required this.icon,
+    required this.onTap,
+    this.active = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -395,9 +415,15 @@ class _IconAction extends StatelessWidget {
         decoration: BoxDecoration(
           color: AppColors.surface2,
           borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: AppColors.border),
+          border: Border.all(
+            color: active ? AppColors.accent2 : AppColors.border,
+          ),
         ),
-        child: Icon(icon, size: 20, color: AppColors.textSecondary),
+        child: Icon(
+          icon,
+          size: 20,
+          color: active ? AppColors.accent2 : AppColors.textSecondary,
+        ),
       ),
     );
   }

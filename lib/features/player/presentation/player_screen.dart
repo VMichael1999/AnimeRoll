@@ -10,6 +10,7 @@ import '../../../shared/models/anime_model.dart';
 import '../../../shared/models/episode_model.dart';
 import '../../../shared/widgets/error_view.dart';
 import '../../detail/data/detail_provider.dart';
+import '../../favorites/data/favorites_provider.dart';
 import '../../settings/data/settings_provider.dart';
 import '../data/player_provider.dart';
 
@@ -803,7 +804,7 @@ class _AnimeEpisodeInfo extends StatelessWidget {
   }
 }
 
-class _EpisodeInfoBody extends StatelessWidget {
+class _EpisodeInfoBody extends ConsumerWidget {
   final String title;
   final AnimeModel? anime;
   final bool loading;
@@ -815,7 +816,14 @@ class _EpisodeInfoBody extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isFavorite = anime == null
+        ? false
+        : ref.watch(
+            favoritesProvider.select(
+              (items) => items.any((item) => item.url == anime!.url),
+            ),
+          );
     final metadata = [
       if (anime?.type != null) anime!.type!,
       if (anime?.year != null) anime!.year!,
@@ -827,12 +835,54 @@ class _EpisodeInfoBody extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (anime?.title.isNotEmpty == true)
-          Text(
-            anime!.title,
-            style: const TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w800,
-              color: AppColors.accent2,
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  anime!.title,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.accent2,
+                  ),
+                ),
+              ),
+              IconButton(
+                tooltip: isFavorite ? 'Quitar favorito' : 'Agregar favorito',
+                onPressed: anime == null
+                    ? null
+                    : () => ref.read(favoritesProvider.notifier).toggle(anime!),
+                icon: Icon(
+                  isFavorite
+                      ? Icons.favorite_rounded
+                      : Icons.favorite_border_rounded,
+                  color: isFavorite
+                      ? AppColors.accent2
+                      : AppColors.textSecondary,
+                  size: 22,
+                ),
+                constraints: const BoxConstraints.tightFor(
+                  width: 38,
+                  height: 38,
+                ),
+                padding: EdgeInsets.zero,
+              ),
+            ],
+          )
+        else if (anime != null)
+          Align(
+            alignment: Alignment.centerRight,
+            child: IconButton(
+              tooltip: isFavorite ? 'Quitar favorito' : 'Agregar favorito',
+              onPressed: () =>
+                  ref.read(favoritesProvider.notifier).toggle(anime!),
+              icon: Icon(
+                isFavorite
+                    ? Icons.favorite_rounded
+                    : Icons.favorite_border_rounded,
+                color: isFavorite ? AppColors.accent2 : AppColors.textSecondary,
+                size: 22,
+              ),
             ),
           ),
         const SizedBox(height: 4),

@@ -59,6 +59,20 @@ class AnimeModel {
     );
   }
 
+  Map<String, dynamic> toJson() => {
+    'title': title,
+    'url': url,
+    'cover': cover,
+    'synopsis': synopsis,
+    'status': status,
+    'type': type,
+    'year': year,
+    'genres': genres,
+    'episodeCount': episodeCount,
+    'score': score,
+    'votes': votes,
+  };
+
   static String? _yearFromDate(Object? value) {
     final text = value?.toString();
     if (text == null || text.length < 4) return null;

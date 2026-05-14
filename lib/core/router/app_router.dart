@@ -4,6 +4,7 @@ import '../../features/search/presentation/search_screen.dart';
 import '../../features/detail/presentation/detail_screen.dart';
 import '../../features/player/presentation/player_screen.dart';
 import '../../features/schedule/presentation/schedule_screen.dart';
+import '../../features/favorites/presentation/favorites_screen.dart';
 import '../../features/downloads/presentation/downloads_screen.dart';
 import '../../features/settings/presentation/settings_screen.dart';
 import '../shell/main_shell.dart';
@@ -20,6 +21,10 @@ final appRouter = GoRouter(
           builder: (context, _) => const ScheduleScreen(),
         ),
         GoRoute(path: '/search', builder: (context, _) => const SearchScreen()),
+        GoRoute(
+          path: '/favorites',
+          builder: (context, _) => const FavoritesScreen(),
+        ),
         GoRoute(
           path: '/downloads',
           builder: (context, _) => const DownloadsScreen(),

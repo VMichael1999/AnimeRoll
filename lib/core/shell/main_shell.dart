@@ -10,8 +10,9 @@ class MainShell extends StatelessWidget {
     final location = GoRouterState.of(context).uri.path;
     if (location.startsWith('/schedule')) return 1;
     if (location.startsWith('/search')) return 2;
-    if (location.startsWith('/downloads')) return 3;
-    if (location.startsWith('/settings')) return 4;
+    if (location.startsWith('/favorites')) return 3;
+    if (location.startsWith('/downloads')) return 4;
+    if (location.startsWith('/settings')) return 5;
     return 0;
   }
 
@@ -36,8 +37,10 @@ class MainShell extends StatelessWidget {
             case 2:
               context.go('/search');
             case 3:
-              context.go('/downloads');
+              context.go('/favorites');
             case 4:
+              context.go('/downloads');
+            case 5:
               context.go('/settings');
           }
         },
@@ -53,6 +56,10 @@ class MainShell extends StatelessWidget {
           BottomNavigationBarItem(
             icon: Icon(Icons.search_rounded),
             label: 'Buscar',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.favorite_rounded),
+            label: 'Favoritos',
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.download_rounded),

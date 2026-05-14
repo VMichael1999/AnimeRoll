@@ -1,7 +1,7 @@
 class AppConstants {
   static const String baseUrl = String.fromEnvironment(
     'ANIME_API_BASE_URL',
-    defaultValue: 'http://localhost:3000/api/v1',
+    defaultValue: 'https://animea1v-api-production.up.railway.app/api/v1',
   );
   static const String apiKey = String.fromEnvironment(
     'ANIME_API_KEY',

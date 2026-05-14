@@ -77,18 +77,24 @@ class AnimeRepository {
     int limit = 24,
   }) async {
     final results = <AnimeModel>[];
+    final fallbackResults = <AnimeModel>[];
     final seen = <String>{};
+    final fallbackSeen = <String>{};
     final minimumUsableResults = limit < 12 ? limit : 12;
 
     for (final domain in imageFirstDomains) {
       try {
         final items = await search(query, domain: domain);
         for (final item in items) {
-          if (item.cover == null || item.url.isEmpty || !seen.add(item.url)) {
+          if (item.url.isEmpty) {
             continue;
           }
-          results.add(item);
-          if (results.length >= limit) return results;
+          if (item.cover == null) {
+            if (fallbackSeen.add(item.url)) fallbackResults.add(item);
+          } else if (seen.add(item.url)) {
+            results.add(item);
+            if (results.length >= limit) return results;
+          }
         }
         if (results.length >= minimumUsableResults) return results;
       } catch (_) {
@@ -97,6 +103,9 @@ class AnimeRepository {
     }
 
     if (results.isNotEmpty) return results;
+    if (fallbackResults.isNotEmpty) {
+      return fallbackResults.take(limit).toList();
+    }
 
     try {
       final fallbackItems = await search(query);

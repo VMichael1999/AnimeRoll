@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:floating/floating.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -30,6 +31,7 @@ class DownloadPlayerScreen extends ConsumerStatefulWidget {
 }
 
 class _DownloadPlayerScreenState extends ConsumerState<DownloadPlayerScreen> {
+  final _floating = Floating();
   VideoPlayerController? _controller;
   Object? _error;
   bool _showControls = true;
@@ -105,58 +107,88 @@ class _DownloadPlayerScreenState extends ConsumerState<DownloadPlayerScreen> {
     final animeTitle = current?.albumTitle ?? widget.animeTitle ?? 'AnimeRoll';
     final episodes = _albumEpisodes(downloads, current);
 
-    return Scaffold(
-      backgroundColor: AppColors.bg,
-      body: SafeArea(
-        top: !_isFullscreen,
-        bottom: !_isFullscreen,
-        child: _isFullscreen
-            ? _VideoStage(
-                controller: _controller,
-                error: _error,
-                title: title,
-                animeTitle: animeTitle,
-                speed: _speed,
-                showControls: _showControls,
-                fullscreen: true,
-                onBack: _exitFullscreen,
-                onToggleControls: _toggleControls,
-                onTogglePlay: _togglePlay,
-                onSeekRelative: _seekRelative,
-                onSeekToFraction: _seekToFraction,
-                onSpeedTap: _cycleSpeed,
-                onFullscreenTap: _exitFullscreen,
-              )
-            : Column(
-                children: [
-                  _VideoStage(
-                    controller: _controller,
-                    error: _error,
-                    title: title,
-                    animeTitle: animeTitle,
-                    speed: _speed,
-                    showControls: _showControls,
-                    fullscreen: false,
-                    onBack: () => context.pop(),
-                    onToggleControls: _toggleControls,
-                    onTogglePlay: _togglePlay,
-                    onSeekRelative: _seekRelative,
-                    onSeekToFraction: _seekToFraction,
-                    onSpeedTap: _cycleSpeed,
-                    onFullscreenTap: _enterFullscreen,
+    final videoStage = _VideoStage(
+      controller: _controller,
+      error: _error,
+      title: title,
+      animeTitle: animeTitle,
+      speed: _speed,
+      showControls: _showControls,
+      fullscreen: _isFullscreen,
+      onBack: _isFullscreen ? _exitFullscreen : () => context.pop(),
+      onToggleControls: _toggleControls,
+      onTogglePlay: _togglePlay,
+      onSeekRelative: _seekRelative,
+      onSeekToFraction: _seekToFraction,
+      onSpeedTap: _cycleSpeed,
+      onFullscreenTap: _isFullscreen ? _exitFullscreen : _enterFullscreen,
+      onPiP: _enterPiP,
+    );
+
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) async {
+        if (didPop) return;
+        if (_isFullscreen) {
+          await _exitFullscreen();
+          return;
+        }
+        final router = GoRouter.of(context);
+        final available = await _floating.isPipAvailable;
+        if (available && mounted) {
+          await _floating.enable(
+            const ImmediatePiP(aspectRatio: Rational(16, 9)),
+          );
+        } else {
+          router.pop();
+        }
+      },
+      child: PiPSwitcher(
+        childWhenEnabled: ColoredBox(
+          color: Colors.black,
+          child: Center(
+            child: _VideoStage(
+              controller: _controller,
+              error: _error,
+              title: title,
+              animeTitle: animeTitle,
+              speed: _speed,
+              showControls: false,
+              fullscreen: false,
+              onBack: () {},
+              onToggleControls: () {},
+              onTogglePlay: _togglePlay,
+              onSeekRelative: _seekRelative,
+              onSeekToFraction: _seekToFraction,
+              onSpeedTap: _cycleSpeed,
+              onFullscreenTap: () {},
+            ),
+          ),
+        ),
+        childWhenDisabled: Scaffold(
+          backgroundColor: AppColors.bg,
+          body: SafeArea(
+            top: !_isFullscreen,
+            bottom: !_isFullscreen,
+            child: _isFullscreen
+                ? videoStage
+                : Column(
+                    children: [
+                      videoStage,
+                      Expanded(
+                        child: _InfoPanel(
+                          current: current,
+                          fallbackTitle: title,
+                          fallbackAnimeTitle: animeTitle,
+                          duration: _controller?.value.duration,
+                          episodes: episodes,
+                          onEpisodeTap: _openEpisode,
+                        ),
+                      ),
+                    ],
                   ),
-                  Expanded(
-                    child: _InfoPanel(
-                      current: current,
-                      fallbackTitle: title,
-                      fallbackAnimeTitle: animeTitle,
-                      duration: _controller?.value.duration,
-                      episodes: episodes,
-                      onEpisodeTap: _openEpisode,
-                    ),
-                  ),
-                ],
-              ),
+          ),
+        ),
       ),
     );
   }
@@ -248,6 +280,19 @@ class _DownloadPlayerScreenState extends ConsumerState<DownloadPlayerScreen> {
     _scheduleControlsHide();
   }
 
+  Future<void> _enterPiP() async {
+    final available = await _floating.isPipAvailable;
+    if (!available || !mounted) return;
+    if (_isFullscreen) {
+      setState(() {
+        _isFullscreen = false;
+        _showControls = true;
+      });
+      await _restorePortraitChrome();
+    }
+    await _floating.enable(const ImmediatePiP(aspectRatio: Rational(16, 9)));
+  }
+
   void _toggleControls() {
     setState(() => _showControls = !_showControls);
     if (_showControls) _scheduleControlsHide();
@@ -310,6 +355,7 @@ class _VideoStage extends StatelessWidget {
   final ValueChanged<double> onSeekToFraction;
   final VoidCallback onSpeedTap;
   final VoidCallback onFullscreenTap;
+  final VoidCallback? onPiP;
 
   const _VideoStage({
     required this.controller,
@@ -326,6 +372,7 @@ class _VideoStage extends StatelessWidget {
     required this.onSeekToFraction,
     required this.onSpeedTap,
     required this.onFullscreenTap,
+    this.onPiP,
   });
 
   @override
@@ -373,6 +420,7 @@ class _VideoStage extends StatelessWidget {
                     onSeekToFraction: onSeekToFraction,
                     onSpeedTap: onSpeedTap,
                     onFullscreenTap: onFullscreenTap,
+                    onPiP: onPiP,
                   ),
                 ),
               ),
@@ -434,6 +482,7 @@ class _VideoOverlay extends StatelessWidget {
   final ValueChanged<double> onSeekToFraction;
   final VoidCallback onSpeedTap;
   final VoidCallback onFullscreenTap;
+  final VoidCallback? onPiP;
 
   const _VideoOverlay({
     required this.controller,
@@ -446,6 +495,7 @@ class _VideoOverlay extends StatelessWidget {
     required this.onSeekToFraction,
     required this.onSpeedTap,
     required this.onFullscreenTap,
+    this.onPiP,
   });
 
   @override
@@ -543,6 +593,12 @@ class _VideoOverlay extends StatelessWidget {
                     video.setVolume(video.value.volume == 0 ? 1 : 0);
                   },
                 ),
+                if (onPiP != null)
+                  _OverlayIconButton(
+                    icon: Icons.picture_in_picture_alt_rounded,
+                    tooltip: 'Picture in Picture',
+                    onTap: ready ? onPiP : null,
+                  ),
               ],
             ),
           ),

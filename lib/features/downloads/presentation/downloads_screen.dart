@@ -42,7 +42,7 @@ class DownloadsScreen extends ConsumerWidget {
             const Padding(
               padding: EdgeInsets.fromLTRB(16, 0, 16, 12),
               child: Text(
-                'Cola del servidor Anime1v',
+                'Se guardan en Videos/AnimeRoll del móvil',
                 style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
               ),
             ),
@@ -67,9 +67,7 @@ class _StorageBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final completed = downloads
-        .where((item) => item.status == 'completed')
-        .length;
+    final completed = downloads.where((item) => item.isSavedOnDevice).length;
     final progress = downloads.isEmpty ? 0.0 : completed / downloads.length;
 
     return Container(
@@ -138,6 +136,8 @@ class _DownloadTile extends StatelessWidget {
         download.url;
     final failed = download.status == 'failed';
     final completed = download.status == 'completed';
+    final saving = download.localStatus == 'saving';
+    final saved = download.isSavedOnDevice;
 
     return Container(
       padding: const EdgeInsets.all(12),
@@ -185,8 +185,12 @@ class _DownloadTile extends StatelessWidget {
                 ),
               ),
               Text(
-                completed
-                    ? 'OK'
+                saved
+                    ? 'Móvil'
+                    : saving
+                    ? '${download.localProgress}%'
+                    : completed
+                    ? 'Listo'
                     : failed
                     ? 'Error'
                     : '${download.progress}%',
@@ -201,7 +205,9 @@ class _DownloadTile extends StatelessWidget {
           ClipRRect(
             borderRadius: BorderRadius.circular(3),
             child: LinearProgressIndicator(
-              value: download.progress / 100,
+              value: saving
+                  ? download.localProgress / 100
+                  : download.progress / 100,
               backgroundColor: AppColors.border,
               valueColor: AlwaysStoppedAnimation(
                 failed ? Colors.redAccent : AppColors.accent,
@@ -213,6 +219,10 @@ class _DownloadTile extends StatelessWidget {
           Text(
             failed
                 ? download.error ?? 'Error desconocido'
+                : saved
+                ? 'Guardado en Videos/AnimeRoll'
+                : saving
+                ? 'Guardando en el móvil...'
                 : '${download.quality} · ${download.variant}${download.currentServer != null ? ' · ${download.currentServer}' : ''}',
             style: const TextStyle(
               fontSize: 10,
@@ -221,10 +231,10 @@ class _DownloadTile extends StatelessWidget {
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
           ),
-          if (download.downloadUrl != null) ...[
+          if (download.downloadUrl != null || download.localPath != null) ...[
             const SizedBox(height: 6),
             Text(
-              download.downloadUrl!,
+              download.localPath ?? download.downloadUrl!,
               style: const TextStyle(fontSize: 10, color: AppColors.accent2),
               maxLines: 1,
             ),

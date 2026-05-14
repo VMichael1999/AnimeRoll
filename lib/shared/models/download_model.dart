@@ -11,6 +11,10 @@ class DownloadModel {
   final String? fileSize;
   final String? currentServer;
   final String? error;
+  final String? localPath;
+  final int localProgress;
+  final String localStatus;
+  final String? savedAt;
 
   const DownloadModel({
     required this.id,
@@ -25,10 +29,18 @@ class DownloadModel {
     this.fileSize,
     this.currentServer,
     this.error,
+    this.localPath,
+    this.localProgress = 0,
+    this.localStatus = 'pending',
+    this.savedAt,
   });
 
   bool get isRunning =>
       status == 'queued' || status == 'preparing' || status == 'downloading';
+
+  bool get isLocalRunning => localStatus == 'saving';
+
+  bool get isSavedOnDevice => localStatus == 'saved' && localPath != null;
 
   factory DownloadModel.fromJson(Map<String, dynamic> json) => DownloadModel(
     id: json['downloadId'] as String? ?? json['id'] as String? ?? '',
@@ -43,7 +55,68 @@ class DownloadModel {
     fileSize: json['fileSize']?.toString(),
     currentServer: json['currentServer'] as String?,
     error: json['error'] as String?,
+    localPath: json['localPath'] as String?,
+    localProgress: (json['localProgress'] as num?)?.toInt() ?? 0,
+    localStatus: json['localStatus'] as String? ?? 'pending',
+    savedAt: json['savedAt'] as String?,
   );
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'status': status,
+    'progress': progress,
+    'url': url,
+    'title': title,
+    'thumbnail': thumbnail,
+    'quality': quality,
+    'variant': variant,
+    'downloadUrl': downloadUrl,
+    'fileSize': fileSize,
+    'currentServer': currentServer,
+    'error': error,
+    'localPath': localPath,
+    'localProgress': localProgress,
+    'localStatus': localStatus,
+    'savedAt': savedAt,
+  };
+
+  DownloadModel copyWith({
+    String? id,
+    String? status,
+    int? progress,
+    String? url,
+    String? title,
+    String? thumbnail,
+    String? quality,
+    String? variant,
+    String? downloadUrl,
+    String? fileSize,
+    String? currentServer,
+    String? error,
+    String? localPath,
+    int? localProgress,
+    String? localStatus,
+    String? savedAt,
+  }) {
+    return DownloadModel(
+      id: id ?? this.id,
+      status: status ?? this.status,
+      progress: progress ?? this.progress,
+      url: url ?? this.url,
+      title: title ?? this.title,
+      thumbnail: thumbnail ?? this.thumbnail,
+      quality: quality ?? this.quality,
+      variant: variant ?? this.variant,
+      downloadUrl: downloadUrl ?? this.downloadUrl,
+      fileSize: fileSize ?? this.fileSize,
+      currentServer: currentServer ?? this.currentServer,
+      error: error ?? this.error,
+      localPath: localPath ?? this.localPath,
+      localProgress: localProgress ?? this.localProgress,
+      localStatus: localStatus ?? this.localStatus,
+      savedAt: savedAt ?? this.savedAt,
+    );
+  }
 }
 
 class BatchDownloadModel {

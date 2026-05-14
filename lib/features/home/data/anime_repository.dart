@@ -31,6 +31,7 @@ class AnimeRepository {
   }
 
   Future<List<AnimeModel>> catalog({
+    String domain = 'animeav1.com',
     String letter = '#',
     String? type,
     String? genre,
@@ -42,7 +43,7 @@ class AnimeRepository {
     final response = await _dio.get(
       '/anime/catalog',
       queryParameters: {
-        'domain': 'animeav1.com',
+        'domain': domain,
         'letter': letter,
         'type': type,
         'genre': genre,

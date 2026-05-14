@@ -39,7 +39,12 @@ class HomeScreen extends ConsumerWidget {
           SliverToBoxAdapter(
             child: mainList.when(
               data: (list) => _AnimeRow(
-                title: selectedGenre == 'Todo' ? 'Populares' : selectedGenre,
+                title: isHentaila
+                    ? 'Hentai'
+                    : selectedGenre == 'Todo'
+                    ? 'Populares'
+                    : selectedGenre,
+                action: isHentaila ? 'Catalogo de Hentai' : 'Ver todo',
                 list: list,
               ),
               loading: () => const _HorizontalSkeleton(),
@@ -50,8 +55,13 @@ class HomeScreen extends ConsumerWidget {
             const SliverToBoxAdapter(child: SizedBox(height: 20)),
             SliverToBoxAdapter(
               child: latest.when(
-                data: (list) =>
-                    _AnimeRow(title: 'Nuevos episodios', list: list),
+                data: (list) => _AnimeRow(
+                  title: isHentaila
+                      ? 'Episodios recientes'
+                      : 'Nuevos episodios',
+                  action: isHentaila ? '' : 'Ver todo',
+                  list: list,
+                ),
                 loading: () => const _HorizontalSkeleton(),
                 error: (err, _) => const SizedBox.shrink(),
               ),
@@ -395,9 +405,10 @@ class _ContinueWatching extends ConsumerWidget {
 
 class _AnimeRow extends StatelessWidget {
   final String title;
+  final String? action;
   final List<AnimeModel> list;
 
-  const _AnimeRow({required this.title, required this.list});
+  const _AnimeRow({required this.title, required this.list, this.action});
 
   @override
   Widget build(BuildContext context) {
@@ -407,7 +418,7 @@ class _AnimeRow extends StatelessWidget {
       children: [
         SectionHeader(
           title: title,
-          action: 'Ver todo',
+          action: action == '' ? null : action ?? 'Ver todo',
           onAction: () => context.go('/search'),
         ),
         const SizedBox(height: 10),

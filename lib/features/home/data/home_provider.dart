@@ -11,7 +11,7 @@ final popularAnimeProvider = FutureProvider<List<AnimeModel>>((ref) async {
   final repo = ref.read(animeRepositoryProvider);
   final activeProvider = ref.watch(providerPrefProvider);
   if (activeProvider == 'hentaila.com') {
-    return repo.search('a', domain: activeProvider);
+    return repo.catalog(domain: activeProvider, letter: 'a', limit: 20);
   }
   return repo.searchImageFirst('a', limit: 12);
 });
@@ -20,7 +20,7 @@ final latestAnimeProvider = FutureProvider<List<AnimeModel>>((ref) async {
   final repo = ref.read(animeRepositoryProvider);
   final activeProvider = ref.watch(providerPrefProvider);
   if (activeProvider == 'hentaila.com') {
-    return repo.search('one', domain: activeProvider);
+    return repo.search('ingoku', domain: activeProvider);
   }
   return repo.searchImageFirst('one', limit: 12);
 });

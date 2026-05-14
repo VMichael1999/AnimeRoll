@@ -5,7 +5,9 @@ import '../../settings/data/settings_provider.dart';
 
 final serversProvider = FutureProvider.autoDispose
     .family<List<VideoServerModel>, String>((ref, url) {
-      final preferredServer = ref.read(preferredPlaybackServerProvider);
+      final preferredServer = url.toLowerCase().contains('hentaila.com')
+          ? 'vip'
+          : ref.read(preferredPlaybackServerProvider);
       return ref
           .read(animeRepositoryProvider)
           .getVideoServers(url)
@@ -35,6 +37,7 @@ int _serverScore(VideoServerModel server, String preferredServer) {
   var score = 0;
 
   if (name == 'hls' || name.contains('hls')) score += 500;
+  if (name == 'vip') score += 450;
   if (preferred.isNotEmpty && name.contains(preferred)) score += 200;
   if (_isDirectVideoUrl(url)) score += 100;
   if (server.isHls || url.contains('.m3u8')) score += 30;

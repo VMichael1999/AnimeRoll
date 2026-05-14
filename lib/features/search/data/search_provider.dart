@@ -86,8 +86,10 @@ final catalogResultsProvider = FutureProvider.autoDispose<List<AnimeModel>>((
 ) async {
   final letter = ref.watch(catalogLetterProvider);
   final filters = ref.watch(catalogFiltersProvider);
+  final activeProvider = ref.watch(providerPrefProvider);
   final repo = ref.read(animeRepositoryProvider);
   return repo.catalog(
+    domain: activeProvider == 'hentaila.com' ? activeProvider : 'animeav1.com',
     letter: letter,
     type: filters.type,
     genre: filters.genre,

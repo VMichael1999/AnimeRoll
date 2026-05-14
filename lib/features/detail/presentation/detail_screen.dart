@@ -271,7 +271,9 @@ class _DetailInfo extends ConsumerWidget {
             episodeNumber: episode.number,
             quality: ref.read(qualityPrefProvider),
             variant: ref.read(variantPrefProvider),
-            preferredServer: 'yourupload',
+            preferredServer: anime.url.contains('hentaila.com')
+                ? 'VIP'
+                : 'yourupload',
           );
       if (context.mounted) {
         ScaffoldMessenger.of(
@@ -531,7 +533,9 @@ class _EpisodeList extends ConsumerWidget {
             episodeNumber: episode.number,
             quality: ref.read(qualityPrefProvider),
             variant: ref.read(variantPrefProvider),
-            preferredServer: 'yourupload',
+            preferredServer: animeUrl.contains('hentaila.com')
+                ? 'VIP'
+                : 'yourupload',
           );
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

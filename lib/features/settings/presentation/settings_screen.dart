@@ -10,6 +10,8 @@ class SettingsScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final activeProvider = ref.watch(providerPrefProvider);
+    final preferredServer = ref.watch(preferredPlaybackServerProvider);
     return Scaffold(
       body: SafeArea(
         child: ListView(
@@ -50,9 +52,11 @@ class SettingsScreen extends ConsumerWidget {
                 _PickerRow(
                   icon: Icons.dns_rounded,
                   label: 'Servidor preferido',
-                  value: ref.watch(preferredPlaybackServerProvider).isEmpty
+                  value: activeProvider == 'hentaila.com'
+                      ? 'VIP'
+                      : preferredServer.isEmpty
                       ? 'Auto'
-                      : ref.watch(preferredPlaybackServerProvider),
+                      : preferredServer,
                   onTap: () => ref
                       .read(preferredPlaybackServerProvider.notifier)
                       .set(''),

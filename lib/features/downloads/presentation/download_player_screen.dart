@@ -47,7 +47,7 @@ class _DownloadPlayerScreenState extends ConsumerState<DownloadPlayerScreen> {
     _initialize(_activePath);
   }
 
-  Future<void> _initialize(String path, {bool autoPlay = true}) async {
+  Future<void> _initialize(String path, {bool autoPlay = false}) async {
     _hideControlsTimer?.cancel();
     final previous = _controller;
     previous?.removeListener(_onVideoTick);
@@ -146,7 +146,6 @@ class _DownloadPlayerScreenState extends ConsumerState<DownloadPlayerScreen> {
                       current: current,
                       fallbackTitle: title,
                       fallbackAnimeTitle: animeTitle,
-                      fallbackPath: widget.localPath,
                       duration: _controller?.value.duration,
                       episodes: episodes,
                       onEpisodeTap: _openEpisode,
@@ -763,7 +762,6 @@ class _InfoPanel extends StatelessWidget {
   final DownloadModel? current;
   final String fallbackTitle;
   final String fallbackAnimeTitle;
-  final String fallbackPath;
   final Duration? duration;
   final List<DownloadModel> episodes;
   final ValueChanged<DownloadModel> onEpisodeTap;
@@ -772,7 +770,6 @@ class _InfoPanel extends StatelessWidget {
     required this.current,
     required this.fallbackTitle,
     required this.fallbackAnimeTitle,
-    required this.fallbackPath,
     required this.duration,
     required this.episodes,
     required this.onEpisodeTap,
@@ -780,7 +777,6 @@ class _InfoPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final path = current?.localPath ?? fallbackPath;
     final title = current?.displayEpisodeTitle ?? fallbackTitle;
     final animeTitle = current?.albumTitle ?? fallbackAnimeTitle;
 
@@ -829,34 +825,6 @@ class _InfoPanel extends StatelessWidget {
                 label: _formatDuration(duration!),
               ),
           ],
-        ),
-        const SizedBox(height: 14),
-        Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: AppColors.surface,
-            border: Border.all(color: AppColors.border),
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: Row(
-            children: [
-              const Icon(
-                Icons.description_rounded,
-                color: AppColors.textSecondary,
-                size: 17,
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  path,
-                  style: const TextStyle(
-                    color: AppColors.textSecondary,
-                    fontSize: 11,
-                  ),
-                ),
-              ),
-            ],
-          ),
         ),
         if (episodes.isNotEmpty) ...[
           const SizedBox(height: 18),

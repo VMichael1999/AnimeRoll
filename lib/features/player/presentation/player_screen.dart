@@ -34,6 +34,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   VideoPlayerController? _videoController;
   ChewieController? _chewieController;
   String? _activeVideoUrl;
+  String? _initializingVideoUrl;
   String? _playerError;
   List<VideoServerModel> _lastServers = const [];
 
@@ -47,28 +48,35 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
 
   Future<void> _initPlayer(VideoServerModel server) async {
     final videoUrl = server.url;
+    if (_initializingVideoUrl == videoUrl) return;
+
     _chewieController?.dispose();
-    _videoController?.dispose();
+    final previousController = _videoController;
+    _videoController = null;
+    await previousController?.dispose();
+
     _playerError = null;
     _activeVideoUrl = videoUrl;
+    _initializingVideoUrl = videoUrl;
 
     try {
       final isHls = videoUrl.contains('.m3u8');
-      _videoController = VideoPlayerController.networkUrl(
+      final controller = VideoPlayerController.networkUrl(
         Uri.parse(videoUrl),
         formatHint: isHls ? VideoFormat.hls : null,
       );
 
-      await _videoController!.initialize();
+      _videoController = controller;
+      await controller.initialize();
       if (!mounted || _activeVideoUrl != videoUrl) {
-        await _videoController?.dispose();
-        _videoController = null;
+        await controller.dispose();
+        if (_videoController == controller) _videoController = null;
         return;
       }
 
       _chewieController = ChewieController(
-        videoPlayerController: _videoController!,
-        autoPlay: true,
+        videoPlayerController: controller,
+        autoPlay: false,
         allowFullScreen: true,
         allowMuting: true,
         showControlsOnInitialize: false,
@@ -76,14 +84,32 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         placeholder: const ColoredBox(color: Colors.black),
       );
       await ref.read(preferredPlaybackServerProvider.notifier).set(server.name);
+      _startPlaybackAfterFirstFrame(videoUrl);
     } catch (error) {
       _playerError = 'No se pudo reproducir este servidor';
       if (ref.read(fallbackPrefProvider)) {
         _tryNextServer(videoUrl);
       }
+    } finally {
+      if (_initializingVideoUrl == videoUrl) {
+        _initializingVideoUrl = null;
+      }
     }
 
     if (mounted) setState(() {});
+  }
+
+  void _startPlaybackAfterFirstFrame(String videoUrl) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await Future<void>.delayed(const Duration(milliseconds: 120));
+      if (!mounted || _activeVideoUrl != videoUrl) return;
+      final controller = _videoController;
+      if (controller == null || !controller.value.isInitialized) return;
+      if (controller.value.position > const Duration(seconds: 1)) {
+        await controller.seekTo(Duration.zero);
+      }
+      await controller.play();
+    });
   }
 
   void _tryNextServer(String failedUrl) {
@@ -161,9 +187,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                   }
                   if (_chewieController == null ||
                       _activeVideoUrl != server.url) {
-                    WidgetsBinding.instance.addPostFrameCallback((_) {
-                      _initPlayer(server);
-                    });
+                    if (_initializingVideoUrl != server.url) {
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        _initPlayer(server);
+                      });
+                    }
                     if (_playerError != null) {
                       return Center(
                         child: Text(
@@ -207,11 +235,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                         .set(servers[i].name);
                     ref.read(selectedServerProvider.notifier).state = i;
                     _chewieController?.dispose();
-                    _videoController?.dispose();
+                    final controller = _videoController;
                     _chewieController = null;
                     _videoController = null;
                     _activeVideoUrl = null;
+                    _initializingVideoUrl = null;
                     _playerError = null;
+                    controller?.dispose();
                     if (_isDirectVideoUrl(servers[i].url)) {
                       _initPlayer(servers[i]);
                     } else {

@@ -8,6 +8,7 @@ import '../../features/favorites/presentation/favorites_screen.dart';
 import '../../features/downloads/presentation/downloads_screen.dart';
 import '../../features/downloads/presentation/download_player_screen.dart';
 import '../../features/history/presentation/history_screen.dart';
+import '../../features/library/presentation/offline_library_screen.dart';
 import '../../features/profile/presentation/profile_screen.dart';
 import '../../features/settings/presentation/settings_screen.dart';
 import '../../features/watchlist/presentation/watchlist_screen.dart';
@@ -32,6 +33,10 @@ final appRouter = GoRouter(
         GoRoute(
           path: '/downloads',
           builder: (context, _) => const DownloadsScreen(),
+        ),
+        GoRoute(
+          path: '/library',
+          builder: (context, _) => const OfflineLibraryScreen(),
         ),
         GoRoute(
           path: '/history',

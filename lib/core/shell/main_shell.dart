@@ -205,6 +205,14 @@ class _DrawerMenu extends StatelessWidget {
                     onTap: () => onNavigate('/downloads'),
                   ),
                   _DrawerItem(
+                    icon: Icons.video_library_rounded,
+                    label: 'Biblioteca',
+                    active: location.startsWith('/library'),
+                    color: menuText,
+                    mutedColor: menuMuted,
+                    onTap: () => onNavigate('/library'),
+                  ),
+                  _DrawerItem(
                     icon: Icons.history_rounded,
                     label: 'Historial',
                     active: location.startsWith('/history'),

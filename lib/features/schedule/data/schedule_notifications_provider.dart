@@ -34,17 +34,16 @@ class ScheduleNotificationsNotifier extends StateNotifier<Set<String>> {
     }
 
     final emittedAt = item.emittedAt;
-    if (emittedAt == null || !emittedAt.isAfter(DateTime.now())) {
-      return false;
+    if (emittedAt != null && emittedAt.isAfter(DateTime.now())) {
+      await NotificationService.instance.scheduleEpisodeReminder(
+        id: _idFor(key),
+        title: item.title,
+        at: emittedAt,
+        body: item.episode == null
+            ? 'Nuevo episodio programado'
+            : 'Episodio ${item.episode} está por emitirse',
+      );
     }
-    await NotificationService.instance.scheduleEpisodeReminder(
-      id: _idFor(key),
-      title: item.title,
-      at: emittedAt,
-      body: item.episode == null
-          ? 'Nuevo episodio programado'
-          : 'Episodio ${item.episode} está por emitirse',
-    );
     state = {...state, key};
     await _persist();
     return true;

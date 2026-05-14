@@ -73,26 +73,19 @@ class ScheduleScreen extends ConsumerWidget {
                     ],
                   ),
                   const SizedBox(height: 12),
-                  SizedBox(
-                    height: 46,
-                    child: ListView.separated(
-                      scrollDirection: Axis.horizontal,
-                      itemCount: _weekDays.length,
-                      separatorBuilder: (_, _) => const SizedBox(width: 10),
-                      itemBuilder: (context, index) {
-                        final day = _weekDays[index];
-                        final active = day.value == selectedDay;
-                        final date = _dateForDayValue(day.value);
-                        return _WeekDayButton(
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      for (final day in _weekDays)
+                        _WeekDayButton(
                           short: day.short,
-                          dayNumber: date.day,
-                          active: active,
+                          dayNumber: _dateForDayValue(day.value).day,
+                          active: day.value == selectedDay,
                           onTap: () =>
                               ref.read(scheduleDayProvider.notifier).state =
                                   day.value,
-                        );
-                      },
-                    ),
+                        ),
+                    ],
                   ),
                   const SizedBox(height: 12),
                   schedule.maybeWhen(
@@ -149,8 +142,8 @@ class ScheduleScreen extends ConsumerWidget {
 
   static DateTime _dateForDayValue(int value) {
     final now = DateTime.now();
-    final todayValue = now.weekday % 7;
-    final diff = value - todayValue;
+    final targetWeekday = value == 0 ? DateTime.sunday : value;
+    final diff = targetWeekday - now.weekday;
     return DateTime(now.year, now.month, now.day).add(Duration(days: diff));
   }
 
@@ -393,6 +386,22 @@ class _ScheduleTile extends ConsumerWidget {
               ),
             ),
             const SizedBox(width: 10),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(7),
+              child: SizedBox(
+                width: 44,
+                height: 44,
+                child: item.cover == null || item.cover!.isEmpty
+                    ? const _ScheduleCoverPlaceholder()
+                    : Image.network(
+                        item.cover!,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, _, _) =>
+                            const _ScheduleCoverPlaceholder(),
+                      ),
+              ),
+            ),
+            const SizedBox(width: 10),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -440,7 +449,7 @@ class _ScheduleTile extends ConsumerWidget {
               icon: Icon(
                 enabled
                     ? Icons.notifications_active_rounded
-                    : Icons.notifications_rounded,
+                    : Icons.notifications_none_rounded,
                 size: 18,
                 color: enabled ? AppColors.accent2 : AppColors.textSecondary,
               ),
@@ -462,6 +471,24 @@ class _ScheduleTile extends ConsumerWidget {
     final hour = value.hour.toString().padLeft(2, '0');
     final minute = value.minute.toString().padLeft(2, '0');
     return '$hour:$minute';
+  }
+}
+
+class _ScheduleCoverPlaceholder extends StatelessWidget {
+  const _ScheduleCoverPlaceholder();
+
+  @override
+  Widget build(BuildContext context) {
+    return ColoredBox(
+      color: AppColors.surface2,
+      child: Center(
+        child: Icon(
+          Icons.image_not_supported_outlined,
+          color: AppColors.textSecondary,
+          size: 18,
+        ),
+      ),
+    );
   }
 }
 

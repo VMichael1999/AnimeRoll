@@ -16,7 +16,7 @@ class DownloadsScreen extends ConsumerStatefulWidget {
 }
 
 class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
-  _DownloadTab _tab = _DownloadTab.saved;
+  _DownloadTab _tab = _DownloadTab.active;
 
   @override
   Widget build(BuildContext context) {
@@ -28,31 +28,6 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
           (item) => item.status == 'failed' || item.localStatus == 'failed',
         )
         .toList();
-
-    if (_tab == _DownloadTab.saved) {
-      return Scaffold(
-        body: SafeArea(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _OfflineBanner(
-                onRetry: () => ref.read(downloadsProvider.notifier).refresh(),
-              ),
-              _OfflineLibraryHeader(albums: albums),
-              Expanded(
-                child: _AlbumLibrary(
-                  albums: albums,
-                  onOpenAlbum: (album) => _openAlbumPlayer(context, album),
-                  onDeleteAlbum: (album) => ref
-                      .read(downloadsProvider.notifier)
-                      .removeAlbum(album.key),
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
 
     return Scaffold(
       body: SafeArea(
@@ -75,9 +50,6 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
                 _DownloadTab.saved => _AlbumLibrary(
                   albums: albums,
                   onOpenAlbum: (album) => _openAlbumPlayer(context, album),
-                  onDeleteAlbum: (album) => ref
-                      .read(downloadsProvider.notifier)
-                      .removeAlbum(album.key),
                 ),
                 _DownloadTab.active => _DownloadQueue(
                   downloads: active,
@@ -146,83 +118,6 @@ class _DownloadsHeader extends StatelessWidget {
             tooltip: 'Actualizar',
             onPressed: onRefresh,
             icon: Icon(Icons.more_vert_rounded),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _OfflineBanner extends StatelessWidget {
-  final VoidCallback onRetry;
-
-  const _OfflineBanner({required this.onRetry});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
-      decoration: BoxDecoration(
-        color: AppColors.warning.withValues(alpha: 0.18),
-        border: Border(bottom: BorderSide(color: AppColors.warning)),
-      ),
-      child: Row(
-        children: [
-          Icon(Icons.wifi_off_rounded, color: AppColors.warning, size: 18),
-          const SizedBox(width: 10),
-          const Expanded(
-            child: Text(
-              'Sin conexión — Modo offline activo',
-              style: TextStyle(
-                color: AppColors.warning,
-                fontSize: 12,
-                fontWeight: FontWeight.w900,
-              ),
-            ),
-          ),
-          TextButton(
-            onPressed: onRetry,
-            child: const Text(
-              'Reintentar',
-              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w900),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _OfflineLibraryHeader extends StatelessWidget {
-  final List<_DownloadAlbum> albums;
-
-  const _OfflineLibraryHeader({required this.albums});
-
-  @override
-  Widget build(BuildContext context) {
-    final episodes = albums.fold<int>(
-      0,
-      (total, album) => total + album.items.length,
-    );
-    final bytes = albums.fold<int>(0, (total, album) => total + album.bytes);
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Biblioteca offline',
-            style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
-          ),
-          const SizedBox(height: 10),
-          Text(
-            '${albums.length} series · $episodes episodios · ${_formatBytes(bytes)} usados',
-            style: TextStyle(
-              color: AppColors.textSecondary,
-              fontSize: 12,
-              fontWeight: FontWeight.w800,
-            ),
           ),
         ],
       ),
@@ -458,25 +353,24 @@ class _TabButton extends StatelessWidget {
 class _AlbumLibrary extends StatelessWidget {
   final List<_DownloadAlbum> albums;
   final ValueChanged<_DownloadAlbum> onOpenAlbum;
-  final ValueChanged<_DownloadAlbum> onDeleteAlbum;
 
-  const _AlbumLibrary({
-    required this.albums,
-    required this.onOpenAlbum,
-    required this.onDeleteAlbum,
-  });
+  const _AlbumLibrary({required this.albums, required this.onOpenAlbum});
 
   @override
   Widget build(BuildContext context) {
     if (albums.isEmpty) return const _EmptyDownloads();
-    return ListView.separated(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 18),
+    return GridView.builder(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        childAspectRatio: 0.66,
+        crossAxisSpacing: 14,
+        mainAxisSpacing: 16,
+      ),
       itemCount: albums.length,
-      separatorBuilder: (_, _) => const SizedBox(height: 10),
       itemBuilder: (context, index) => _AlbumCard(
         album: albums[index],
         onTap: () => onOpenAlbum(albums[index]),
-        onDelete: () => onDeleteAlbum(albums[index]),
       ),
     );
   }
@@ -829,164 +723,59 @@ class _QueueButton extends StatelessWidget {
 class _AlbumCard extends StatelessWidget {
   final _DownloadAlbum album;
   final VoidCallback onTap;
-  final VoidCallback onDelete;
 
-  const _AlbumCard({
-    required this.album,
-    required this.onTap,
-    required this.onDelete,
-  });
+  const _AlbumCard({required this.album, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
-      child: Container(
-        decoration: BoxDecoration(
-          color: AppColors.surface,
-          borderRadius: BorderRadius.circular(9),
-          border: Border.all(color: AppColors.border),
-        ),
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(10),
-              child: Row(
-                children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(7),
-                    child: SizedBox(
-                      width: 62,
-                      height: 78,
-                      child: _CoverImage(url: album.cover),
-                    ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Stack(
+              children: [
+                Positioned.fill(
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: _CoverImage(url: album.cover),
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: SizedBox(
-                      height: 78,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            album.title,
-                            style: const TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w900,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            album.subtitle,
-                            style: const TextStyle(
-                              color: AppColors.textSecondary,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Wrap(
-                            spacing: 6,
-                            runSpacing: 5,
-                            children:
-                                album.items
-                                    .take(4)
-                                    .map(
-                                      (item) => _EpisodePill(
-                                        label: item.episodeNumber == null
-                                            ? item.displayEpisodeTitle
-                                            : 'Ep. ${item.episodeNumber}',
-                                      ),
-                                    )
-                                    .toList()
-                                  ..addAll(
-                                    album.items.length > 4
-                                        ? [
-                                            _EpisodePill(
-                                              label:
-                                                  '+${album.items.length - 4}',
-                                            ),
-                                          ]
-                                        : const [],
-                                  ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-              decoration: BoxDecoration(
-                color: AppColors.surface2,
-                borderRadius: const BorderRadius.vertical(
-                  bottom: Radius.circular(9),
                 ),
-              ),
-              child: Row(
-                children: [
-                  Text(
-                    '${album.items.length} episodios',
-                    style: const TextStyle(
-                      color: AppColors.textSecondary,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w800,
+                Positioned(
+                  left: 0,
+                  bottom: 0,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 5,
                     ),
-                  ),
-                  const Spacer(),
-                  Text(
-                    _formatBytes(album.bytes),
-                    style: const TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w900,
+                    decoration: BoxDecoration(
+                      color: AppColors.surface2,
+                      borderRadius: BorderRadius.only(
+                        topRight: Radius.circular(6),
+                      ),
                     ),
-                  ),
-                  const Spacer(),
-                  GestureDetector(
-                    onTap: onDelete,
-                    child: const Text(
-                      'Eliminar',
+                    child: Text(
+                      '${album.savedCount}/${album.items.length}',
                       style: TextStyle(
-                        color: AppColors.error,
                         fontSize: 11,
-                        fontWeight: FontWeight.w900,
+                        fontWeight: FontWeight.w800,
                       ),
                     ),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _EpisodePill extends StatelessWidget {
-  final String label;
-
-  const _EpisodePill({required this.label});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: AppColors.accent.withValues(alpha: 0.22),
-        borderRadius: BorderRadius.circular(5),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          color: AppColors.accent2,
-          fontSize: 10,
-          fontWeight: FontWeight.w900,
-        ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            album.title,
+            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
       ),
     );
   }
@@ -1053,7 +842,7 @@ class _DownloadAlbum {
 
   static List<_DownloadAlbum> fromDownloads(List<DownloadModel> downloads) {
     final grouped = <String, List<DownloadModel>>{};
-    for (final download in downloads.where((item) => item.isSavedOnDevice)) {
+    for (final download in downloads) {
       grouped.putIfAbsent(download.albumKey, () => []).add(download);
     }
 

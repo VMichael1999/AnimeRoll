@@ -15,11 +15,13 @@ final downloadsProvider =
 
 class DownloadsNotifier extends StateNotifier<List<DownloadModel>> {
   static const _storageKey = 'downloadHistory';
+  static const _maxLocalSaveAttempts = 3;
 
   final Ref _ref;
   final DeviceVideoSaver _videoSaver;
   Timer? _timer;
   final Set<String> _savingIds = {};
+  final Map<String, int> _localSaveAttempts = {};
   bool _localSaveRunning = false;
 
   DownloadsNotifier(this._ref)
@@ -130,58 +132,54 @@ class DownloadsNotifier extends StateNotifier<List<DownloadModel>> {
 
   Future<void> refresh() async {
     if (state.isEmpty) return;
-    final repo = _ref.read(animeRepositoryProvider);
-    final updated = <DownloadModel>[];
-    for (final item in state) {
-      try {
-        final latest = await repo.getDownloadStatus(item.id);
-        updated.add(
-          item.copyWith(
-            id: latest.id,
-            status: latest.status,
-            phase: latest.phase,
-            progress: latest.progress,
-            url: latest.url,
-            quality: latest.quality,
-            variant: latest.variant,
-            downloadUrl: latest.downloadUrl,
-            fileSize: latest.fileSize,
-            currentServer: latest.currentServer,
-            error: latest.error,
-            downloadedBytes: latest.downloadedBytes,
-            totalBytes: latest.totalBytes,
-            speedBytesPerSecond: latest.speedBytesPerSecond,
-            etaSeconds: latest.etaSeconds,
-            createdAt: latest.createdAt,
-            queuedAt: latest.queuedAt,
-            startedAt: latest.startedAt,
-            transferStartedAt: latest.transferStartedAt,
-            updatedAt: latest.updatedAt,
-            completedAt: latest.completedAt,
-          ),
-        );
-      } on DioException catch (error) {
-        if (error.response?.statusCode == 404) {
-          updated.add(
-            item.copyWith(
-              status: 'failed',
-              progress: 0,
-              error: 'Descarga no encontrada en el servidor',
-            ),
-          );
-        } else {
-          updated.add(item);
-        }
-      } catch (_) {
-        updated.add(item);
-      }
-    }
+    final updated = await Future.wait(state.map(_refreshItem));
     state = updated;
     unawaited(_persist());
     unawaited(_drainLocalSaveQueue());
-    if (!state.any((item) => item.isActive)) {
+    if (!state.any((item) => item.isActive || _canRetryLocalSave(item))) {
       _timer?.cancel();
       _timer = null;
+    }
+  }
+
+  Future<DownloadModel> _refreshItem(DownloadModel item) async {
+    final repo = _ref.read(animeRepositoryProvider);
+    try {
+      final latest = await repo.getDownloadStatus(item.id);
+      return item.copyWith(
+        id: latest.id,
+        status: latest.status,
+        phase: latest.phase,
+        progress: latest.progress,
+        url: latest.url,
+        quality: latest.quality,
+        variant: latest.variant,
+        downloadUrl: latest.downloadUrl,
+        fileSize: latest.fileSize,
+        currentServer: latest.currentServer,
+        error: latest.error,
+        downloadedBytes: latest.downloadedBytes,
+        totalBytes: latest.totalBytes,
+        speedBytesPerSecond: latest.speedBytesPerSecond,
+        etaSeconds: latest.etaSeconds,
+        createdAt: latest.createdAt,
+        queuedAt: latest.queuedAt,
+        startedAt: latest.startedAt,
+        transferStartedAt: latest.transferStartedAt,
+        updatedAt: latest.updatedAt,
+        completedAt: latest.completedAt,
+      );
+    } on DioException catch (error) {
+      if (error.response?.statusCode == 404) {
+        return item.copyWith(
+          status: 'failed',
+          progress: 0,
+          error: 'Descarga no encontrada en el servidor',
+        );
+      }
+      return item;
+    } catch (_) {
+      return item;
     }
   }
 
@@ -264,8 +262,8 @@ class DownloadsNotifier extends StateNotifier<List<DownloadModel>> {
                   item.downloadUrl != null &&
                   !item.isSavedOnDevice &&
                   !item.isLocalRunning &&
-                  item.localStatus != 'failed' &&
-                  !item.isPaused,
+                  !item.isPaused &&
+                  _canRetryLocalSave(item),
             )
             .firstOrNull;
         if (next == null) break;
@@ -278,6 +276,8 @@ class DownloadsNotifier extends StateNotifier<List<DownloadModel>> {
 
   Future<void> _saveToDevice(DownloadModel item) async {
     if (!_savingIds.add(item.id)) return;
+    final attempt = (_localSaveAttempts[item.id] ?? 0) + 1;
+    _localSaveAttempts[item.id] = attempt;
     _updateItem(
       item.id,
       (download) => download.copyWith(localStatus: 'saving', localProgress: 0),
@@ -310,14 +310,21 @@ class DownloadsNotifier extends StateNotifier<List<DownloadModel>> {
           savedAt: DateTime.now().toIso8601String(),
         ),
       );
+      _localSaveAttempts.remove(item.id);
     } catch (error) {
+      final exhausted = attempt >= _maxLocalSaveAttempts;
       _updateItem(
         item.id,
         (download) => download.copyWith(
-          localStatus: 'failed',
-          error: 'No se pudo guardar en el móvil: $error',
+          localStatus: exhausted ? 'failed' : 'pending',
+          error: exhausted
+              ? 'No se pudo guardar en el móvil: $error'
+              : 'Reintentando guardado local ($attempt/$_maxLocalSaveAttempts)',
         ),
       );
+      if (!exhausted) {
+        await Future<void>.delayed(Duration(seconds: attempt * 2));
+      }
     } finally {
       _savingIds.remove(item.id);
       unawaited(_persist());
@@ -338,10 +345,31 @@ class DownloadsNotifier extends StateNotifier<List<DownloadModel>> {
     state = decoded
         .whereType<Map>()
         .map((item) => DownloadModel.fromJson(item.cast<String, dynamic>()))
+        .map(_normalizeLoadedItem)
         .toList();
-    if (state.any((item) => item.isRunning || item.isLocalRunning)) {
+    if (state.any(
+      (item) =>
+          item.isRunning || item.isLocalRunning || _canRetryLocalSave(item),
+    )) {
       _startPolling();
     }
+  }
+
+  DownloadModel _normalizeLoadedItem(DownloadModel item) {
+    if (item.localStatus == 'saving') {
+      return item.copyWith(
+        localStatus: 'pending',
+        localProgress: 0,
+        error: 'Guardado local interrumpido, reanudando',
+      );
+    }
+    return item;
+  }
+
+  bool _canRetryLocalSave(DownloadModel item) {
+    if (item.isSavedOnDevice || item.isPaused) return false;
+    if (item.status != 'completed' || item.downloadUrl == null) return false;
+    return (_localSaveAttempts[item.id] ?? 0) < _maxLocalSaveAttempts;
   }
 
   Future<void> _persist() async {

@@ -76,6 +76,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                       controller: _controller,
                       isHentaila: isHentaila,
                     )
+                  else if (isHentaila)
+                    _HentailaCatalogHeader(controller: _controller)
                   else
                     const _CatalogHeader(),
                 ],
@@ -89,6 +91,27 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _HentailaCatalogHeader extends ConsumerWidget {
+  final TextEditingController controller;
+
+  const _HentailaCatalogHeader({required this.controller});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Column(
+      children: [
+        _SearchInput(
+          controller: controller,
+          onChanged: (value) => ref.read(queryProvider.notifier).state = value,
+          hintText: 'Buscar hentai...',
+        ),
+        const SizedBox(height: 12),
+        const _CatalogHeader(),
+      ],
     );
   }
 }

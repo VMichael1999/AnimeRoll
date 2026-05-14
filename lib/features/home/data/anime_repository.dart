@@ -38,6 +38,7 @@ class AnimeRepository {
     String? year,
     String? status,
     String? sort,
+    String? search,
     int limit = 40,
   }) async {
     final response = await _dio.get(
@@ -50,6 +51,7 @@ class AnimeRepository {
         'year': year,
         'status': status,
         'sort': sort,
+        'search': search,
         'limit': limit,
       }..removeWhere((_, v) => v == null || v == ''),
     );

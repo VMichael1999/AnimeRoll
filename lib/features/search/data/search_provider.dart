@@ -87,6 +87,7 @@ final catalogResultsProvider = FutureProvider.autoDispose<List<AnimeModel>>((
   final letter = ref.watch(catalogLetterProvider);
   final filters = ref.watch(catalogFiltersProvider);
   final activeProvider = ref.watch(providerPrefProvider);
+  final query = ref.watch(queryProvider);
   final repo = ref.read(animeRepositoryProvider);
   return repo.catalog(
     domain: activeProvider == 'hentaila.com' ? activeProvider : 'animeav1.com',
@@ -96,6 +97,7 @@ final catalogResultsProvider = FutureProvider.autoDispose<List<AnimeModel>>((
     year: filters.year,
     status: filters.status,
     sort: filters.sort,
+    search: activeProvider == 'hentaila.com' ? query.trim() : null,
     limit: 60,
   );
 });

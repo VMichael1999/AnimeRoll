@@ -3,6 +3,7 @@ import '../../../core/network/dio_client.dart';
 import '../../../shared/models/anime_model.dart';
 import '../../../shared/models/download_model.dart';
 import '../../../shared/models/episode_model.dart';
+import '../../../shared/models/schedule_anime_model.dart';
 
 class AnimeRepository {
   final Dio _dio = DioClient.create();
@@ -25,6 +26,49 @@ class AnimeRepository {
     final List items = results is List ? results : const [];
     return items
         .map((e) => AnimeModel.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<List<AnimeModel>> catalog({
+    String letter = '#',
+    String? type,
+    String? genre,
+    String? year,
+    String? status,
+    String? sort,
+    int limit = 40,
+  }) async {
+    final response = await _dio.get(
+      '/anime/catalog',
+      queryParameters: {
+        'domain': 'animeav1.com',
+        'letter': letter,
+        'type': type,
+        'genre': genre,
+        'year': year,
+        'status': status,
+        'sort': sort,
+        'limit': limit,
+      }..removeWhere((_, v) => v == null || v == ''),
+    );
+    final data = _responseData(response);
+    final results = data['results'];
+    final List items = results is List ? results : const [];
+    return items
+        .map((e) => AnimeModel.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<List<ScheduleAnimeModel>> schedule({required int day}) async {
+    final response = await _dio.get(
+      '/anime/schedule',
+      queryParameters: {'domain': 'animeav1.com', 'day': day},
+    );
+    final data = _responseData(response);
+    final results = data['results'];
+    final List items = results is List ? results : const [];
+    return items
+        .map((e) => ScheduleAnimeModel.fromJson(e as Map<String, dynamic>))
         .toList();
   }
 
@@ -52,6 +96,21 @@ class AnimeRepository {
       }
     }
 
+    if (results.isNotEmpty) return results;
+
+    try {
+      final fallbackItems = await search(query);
+      for (final item in fallbackItems) {
+        if (item.url.isEmpty || !seen.add(item.url)) {
+          continue;
+        }
+        results.add(item);
+        if (results.length >= limit) return results;
+      }
+    } catch (_) {
+      // Keep the image-first behavior best-effort; callers already handle empty lists.
+    }
+
     return results;
   }
 
@@ -71,13 +130,19 @@ class AnimeRepository {
     }
     if (servers is Map<String, dynamic>) {
       return [
-        ...?((servers['sub'] ?? servers['SUB']) as List?)
-            ?.cast<Map<String, dynamic>>(),
-        ...?((servers['dub'] ?? servers['DUB']) as List?)
-            ?.cast<Map<String, dynamic>>(),
+        ..._variantServers('DUB', servers['dub'] ?? servers['DUB']),
+        ..._variantServers('SUB', servers['sub'] ?? servers['SUB']),
       ];
     }
     return const [];
+  }
+
+  List<Map<String, dynamic>> _variantServers(String variant, Object? items) {
+    if (items is! List) return const [];
+    return items
+        .whereType<Map>()
+        .map((item) => {...item.cast<String, dynamic>(), 'variant': variant})
+        .toList();
   }
 
   Future<AnimeModel> getInfo(String url) async {
@@ -119,7 +184,7 @@ class AnimeRepository {
   Future<List<VideoServerModel>> getVideoServers(String episodeUrl) async {
     final response = await _dio.get(
       '/anime/episode',
-      queryParameters: {'url': episodeUrl},
+      queryParameters: {'url': episodeUrl, 'includeMega': true},
     );
     return _serverItems(
       _responseData(response),

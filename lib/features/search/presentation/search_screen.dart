@@ -24,8 +24,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final results = ref.watch(searchResultsProvider);
-    final selectedDomain = ref.watch(domainProvider);
+    final mode = ref.watch(searchModeProvider);
 
     return Scaffold(
       body: SafeArea(
@@ -33,46 +32,274 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    'Buscar',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+                  Row(
+                    children: [
+                      const Expanded(
+                        child: Text(
+                          'Buscar',
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                      _ModeButton(
+                        label: 'Buscar',
+                        active: mode == SearchMode.search,
+                        onTap: () =>
+                            ref.read(searchModeProvider.notifier).state =
+                                SearchMode.search,
+                      ),
+                      const SizedBox(width: 8),
+                      _ModeButton(
+                        label: 'Catálogo',
+                        active: mode == SearchMode.catalog,
+                        onTap: () =>
+                            ref.read(searchModeProvider.notifier).state =
+                                SearchMode.catalog,
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 10),
-                  _SearchInput(
-                    controller: _controller,
-                    onChanged: (v) {
-                      ref.read(queryProvider.notifier).state = v;
-                    },
-                  ),
-                  const SizedBox(height: 10),
-                  _ProviderFilter(
-                    selected: selectedDomain,
-                    onSelect: (d) =>
-                        ref.read(domainProvider.notifier).state = d,
-                  ),
+                  const SizedBox(height: 12),
+                  if (mode == SearchMode.search)
+                    _SearchHeader(controller: _controller)
+                  else
+                    const _CatalogHeader(),
                 ],
               ),
             ),
             Expanded(
-              child: results.when(
-                data: (list) {
-                  if (_controller.text.isEmpty) return const _EmptyState();
-                  if (list.isEmpty) return const _NoResults();
-                  return _ResultsGrid(list: list);
-                },
-                loading: () => const Center(child: CircularProgressIndicator()),
-                error: (e, _) => ErrorView(
-                  message:
-                      'Error al buscar. Verifica que la API esté corriendo.',
-                  onRetry: () => ref.invalidate(searchResultsProvider),
+              child: mode == SearchMode.search
+                  ? _SearchResults(controller: _controller)
+                  : const _CatalogResults(),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SearchHeader extends ConsumerWidget {
+  final TextEditingController controller;
+
+  const _SearchHeader({required this.controller});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final selectedDomain = ref.watch(domainProvider);
+    return Column(
+      children: [
+        _SearchInput(
+          controller: controller,
+          onChanged: (v) => ref.read(queryProvider.notifier).state = v,
+        ),
+        const SizedBox(height: 10),
+        _ProviderFilter(
+          selected: selectedDomain,
+          onSelect: (d) => ref.read(domainProvider.notifier).state = d,
+        ),
+      ],
+    );
+  }
+}
+
+class _CatalogHeader extends ConsumerWidget {
+  const _CatalogHeader();
+
+  static const _letters = [
+    '#',
+    'A',
+    'B',
+    'C',
+    'D',
+    'E',
+    'F',
+    'G',
+    'H',
+    'I',
+    'J',
+    'K',
+    'L',
+    'M',
+    'N',
+    'O',
+    'P',
+    'Q',
+    'R',
+    'S',
+    'T',
+    'U',
+    'V',
+    'W',
+    'X',
+    'Y',
+    'Z',
+  ];
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final selected = ref.watch(catalogLetterProvider);
+    final filters = ref.watch(catalogFiltersProvider);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          height: 72,
+          child: SingleChildScrollView(
+            child: Wrap(
+              spacing: 7,
+              runSpacing: 7,
+              children: _letters.map((letter) {
+                final active = selected == letter;
+                return InkWell(
+                  borderRadius: BorderRadius.circular(8),
+                  onTap: () =>
+                      ref.read(catalogLetterProvider.notifier).state = letter,
+                  child: Container(
+                    width: 34,
+                    height: 32,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: active ? AppColors.accent2 : AppColors.surface2,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: active ? AppColors.accent2 : AppColors.border,
+                      ),
+                    ),
+                    child: Text(
+                      letter,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
+                        color: active ? Colors.white : AppColors.textSecondary,
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+        ),
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            Text(
+              selected == '#' ? 'Todos' : 'Letra $selected',
+              style: const TextStyle(
+                fontSize: 12,
+                color: AppColors.textSecondary,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const Spacer(),
+            FilledButton.icon(
+              onPressed: () => _showCatalogFilters(context, ref),
+              icon: Icon(
+                filters.isActive
+                    ? Icons.filter_alt_rounded
+                    : Icons.filter_list_rounded,
+                size: 18,
+              ),
+              label: const Text('Filtros'),
+              style: FilledButton.styleFrom(
+                minimumSize: const Size(0, 38),
+                backgroundColor: AppColors.surface2,
+                foregroundColor: AppColors.textPrimary,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  side: const BorderSide(color: AppColors.border),
                 ),
               ),
             ),
           ],
+        ),
+      ],
+    );
+  }
+}
+
+class _SearchResults extends ConsumerWidget {
+  final TextEditingController controller;
+
+  const _SearchResults({required this.controller});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final results = ref.watch(searchResultsProvider);
+    return results.when(
+      data: (list) {
+        if (controller.text.isEmpty) return const _EmptyState();
+        if (list.isEmpty) return const _NoResults();
+        return _ResultsGrid(list: list);
+      },
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (e, _) => ErrorView(
+        message: 'Error al buscar. Verifica que la API esté corriendo.',
+        onRetry: () => ref.invalidate(searchResultsProvider),
+      ),
+    );
+  }
+}
+
+class _CatalogResults extends ConsumerWidget {
+  const _CatalogResults();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final results = ref.watch(catalogResultsProvider);
+    return results.when(
+      data: (list) {
+        if (list.isEmpty) return const _NoResults();
+        return _ResultsGrid(list: list);
+      },
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (e, _) => ErrorView(
+        message: 'No se pudo cargar el catálogo.',
+        onRetry: () => ref.invalidate(catalogResultsProvider),
+      ),
+    );
+  }
+}
+
+class _ModeButton extends StatelessWidget {
+  final String label;
+  final bool active;
+  final VoidCallback onTap;
+
+  const _ModeButton({
+    required this.label,
+    required this.active,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(8),
+      onTap: onTap,
+      child: Container(
+        height: 34,
+        padding: const EdgeInsets.symmetric(horizontal: 11),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: active ? AppColors.accent2 : AppColors.surface2,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: active ? AppColors.accent2 : AppColors.border,
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w800,
+            color: active ? Colors.white : AppColors.textSecondary,
+          ),
         ),
       ),
     );
@@ -92,7 +319,7 @@ class _SearchInput extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 12),
       decoration: BoxDecoration(
         color: AppColors.surface2,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(8),
         border: Border.all(color: AppColors.border),
       ),
       child: Row(
@@ -146,11 +373,11 @@ class _ProviderFilter extends StatelessWidget {
 
   static const _labels = {
     null: 'Todos',
-    'animeflv.net': 'AnimeFLV',
     'animeav1.com': 'AnimeAV1',
+    'monoschinos2.com': 'MonosChinos',
     'tioanime.com': 'TioAnime',
     'jkanime.net': 'JKAnime',
-    'monoschinos2.com': 'MonosChinos',
+    'animeflv.net': 'AnimeFLV',
   };
 
   @override
@@ -197,6 +424,7 @@ class _ProviderFilter extends StatelessWidget {
 
 class _ResultsGrid extends StatelessWidget {
   final List<AnimeModel> list;
+
   const _ResultsGrid({required this.list});
 
   @override
@@ -216,12 +444,12 @@ class _ResultsGrid extends StatelessWidget {
         ),
         Expanded(
           child: GridView.builder(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 3,
+              crossAxisCount: 2,
               childAspectRatio: 0.58,
-              crossAxisSpacing: 10,
-              mainAxisSpacing: 10,
+              crossAxisSpacing: 14,
+              mainAxisSpacing: 16,
             ),
             itemCount: list.length,
             itemBuilder: (context, i) {
@@ -234,25 +462,56 @@ class _ResultsGrid extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Expanded(
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: anime.cover != null
-                            ? Image.network(
-                                anime.cover!,
-                                fit: BoxFit.cover,
-                                width: double.infinity,
-                                errorBuilder: (context, url, _) =>
-                                    const _CoverPlaceholder(),
-                              )
-                            : const _CoverPlaceholder(),
+                      child: Stack(
+                        children: [
+                          Positioned.fill(
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(8),
+                              child: anime.cover != null
+                                  ? Image.network(
+                                      anime.cover!,
+                                      fit: BoxFit.cover,
+                                      width: double.infinity,
+                                      errorBuilder: (context, url, _) =>
+                                          const _CoverPlaceholder(),
+                                    )
+                                  : const _CoverPlaceholder(),
+                            ),
+                          ),
+                          if (anime.type != null)
+                            Positioned(
+                              left: 0,
+                              bottom: 0,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
+                                decoration: const BoxDecoration(
+                                  color: AppColors.surface2,
+                                  borderRadius: BorderRadius.only(
+                                    topRight: Radius.circular(6),
+                                  ),
+                                ),
+                                child: Text(
+                                  anime.type!,
+                                  style: const TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w800,
+                                    color: AppColors.textPrimary,
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
                       ),
                     ),
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 7),
                     Text(
                       anime.title,
                       style: const TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
                       ),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
@@ -323,6 +582,234 @@ class _NoResults extends StatelessWidget {
             style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
           ),
         ],
+      ),
+    );
+  }
+}
+
+void _showCatalogFilters(BuildContext context, WidgetRef ref) {
+  showModalBottomSheet<void>(
+    context: context,
+    backgroundColor: AppColors.surface,
+    isScrollControlled: true,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+    ),
+    builder: (_) => _CatalogFilterSheet(
+      initialFilters: ref.read(catalogFiltersProvider),
+      onApply: (filters) {
+        ref.read(catalogFiltersProvider.notifier).state = filters;
+      },
+    ),
+  );
+}
+
+class _CatalogFilterSheet extends StatefulWidget {
+  final CatalogFilters initialFilters;
+  final ValueChanged<CatalogFilters> onApply;
+
+  const _CatalogFilterSheet({
+    required this.initialFilters,
+    required this.onApply,
+  });
+
+  @override
+  State<_CatalogFilterSheet> createState() => _CatalogFilterSheetState();
+}
+
+class _CatalogFilterSheetState extends State<_CatalogFilterSheet> {
+  static const _types = ['TV Anime', 'Película', 'OVA', 'ONA', 'Especial'];
+  static const _genres = [
+    'Acción',
+    'Aventura',
+    'Comedia',
+    'Drama',
+    'Fantasía',
+    'Romance',
+    'Shounen',
+    'Slice of Life',
+  ];
+  static const _years = ['2026', '2025', '2024', '2023', '2022', '2021'];
+  static const _statuses = ['En emisión', 'Finalizado', 'Próximamente'];
+  static const _sorts = ['Predeterminado', 'Nombre', 'Recientes'];
+
+  late CatalogFilters _draft;
+
+  @override
+  void initState() {
+    super.initState();
+    _draft = widget.initialFilters;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(
+        left: 16,
+        right: 16,
+        top: 16,
+        bottom: MediaQuery.of(context).viewInsets.bottom + 18,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  'Filtrar',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
+                ),
+              ),
+              IconButton.filledTonal(
+                onPressed: () => Navigator.pop(context),
+                icon: const Icon(Icons.close_rounded),
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
+          _FilterDropdown(
+            label: 'Tipo',
+            value: _draft.type,
+            values: _types,
+            onChanged: (value) => setState(
+              () => _draft = _draft.copyWith(
+                type: value,
+                clearType: value == null,
+              ),
+            ),
+          ),
+          _FilterDropdown(
+            label: 'Género',
+            value: _draft.genre,
+            values: _genres,
+            onChanged: (value) => setState(
+              () => _draft = _draft.copyWith(
+                genre: value,
+                clearGenre: value == null,
+              ),
+            ),
+          ),
+          _FilterDropdown(
+            label: 'Año',
+            value: _draft.year,
+            values: _years,
+            onChanged: (value) => setState(
+              () => _draft = _draft.copyWith(
+                year: value,
+                clearYear: value == null,
+              ),
+            ),
+          ),
+          _FilterDropdown(
+            label: 'Estado',
+            value: _draft.status,
+            values: _statuses,
+            onChanged: (value) => setState(
+              () => _draft = _draft.copyWith(
+                status: value,
+                clearStatus: value == null,
+              ),
+            ),
+          ),
+          _FilterDropdown(
+            label: 'Ordenar por',
+            value: _draft.sort,
+            values: _sorts,
+            onChanged: (value) => setState(
+              () => _draft = _draft.copyWith(
+                sort: value == 'Predeterminado' ? null : value,
+                clearSort: value == null || value == 'Predeterminado',
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            height: 48,
+            child: FilledButton(
+              onPressed: () {
+                widget.onApply(_draft);
+                Navigator.pop(context);
+              },
+              style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFF3BE2D0),
+                foregroundColor: Colors.black,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              child: const Text(
+                'Filtrar',
+                style: TextStyle(fontWeight: FontWeight.w800),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FilterDropdown extends StatelessWidget {
+  final String label;
+  final String? value;
+  final List<String> values;
+  final ValueChanged<String?> onChanged;
+
+  const _FilterDropdown({
+    required this.label,
+    required this.value,
+    required this.values,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: DropdownButtonFormField<String?>(
+        initialValue: value,
+        isExpanded: true,
+        dropdownColor: AppColors.surface2,
+        decoration: InputDecoration(
+          filled: true,
+          fillColor: AppColors.surface2,
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 12,
+            vertical: 12,
+          ),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: BorderSide.none,
+          ),
+        ),
+        hint: Text.rich(
+          TextSpan(
+            children: [
+              TextSpan(text: '$label: '),
+              const TextSpan(
+                text: 'Seleccionar',
+                style: TextStyle(fontWeight: FontWeight.w800),
+              ),
+            ],
+          ),
+          style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
+        ),
+        items: [
+          DropdownMenuItem<String?>(
+            value: null,
+            child: Text('$label: Seleccionar'),
+          ),
+          ...values.map(
+            (item) => DropdownMenuItem<String?>(
+              value: item,
+              child: Text('$label: $item'),
+            ),
+          ),
+        ],
+        onChanged: onChanged,
       ),
     );
   }

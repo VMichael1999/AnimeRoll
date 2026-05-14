@@ -8,9 +8,10 @@ class MainShell extends StatelessWidget {
 
   int _currentIndex(BuildContext context) {
     final location = GoRouterState.of(context).uri.path;
-    if (location.startsWith('/search')) return 1;
-    if (location.startsWith('/downloads')) return 2;
-    if (location.startsWith('/settings')) return 3;
+    if (location.startsWith('/schedule')) return 1;
+    if (location.startsWith('/search')) return 2;
+    if (location.startsWith('/downloads')) return 3;
+    if (location.startsWith('/settings')) return 4;
     return 0;
   }
 
@@ -28,17 +29,39 @@ class MainShell extends StatelessWidget {
         elevation: 0,
         onTap: (i) {
           switch (i) {
-            case 0: context.go('/home');
-            case 1: context.go('/search');
-            case 2: context.go('/downloads');
-            case 3: context.go('/settings');
+            case 0:
+              context.go('/home');
+            case 1:
+              context.go('/schedule');
+            case 2:
+              context.go('/search');
+            case 3:
+              context.go('/downloads');
+            case 4:
+              context.go('/settings');
           }
         },
         items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.grid_view_rounded), label: 'Inicio'),
-          BottomNavigationBarItem(icon: Icon(Icons.search_rounded), label: 'Buscar'),
-          BottomNavigationBarItem(icon: Icon(Icons.download_rounded), label: 'Descargas'),
-          BottomNavigationBarItem(icon: Icon(Icons.settings_rounded), label: 'Ajustes'),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.grid_view_rounded),
+            label: 'Inicio',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.calendar_month_rounded),
+            label: 'Horario',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.search_rounded),
+            label: 'Buscar',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.download_rounded),
+            label: 'Descargas',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.settings_rounded),
+            label: 'Ajustes',
+          ),
         ],
       ),
     );

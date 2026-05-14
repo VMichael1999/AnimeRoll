@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../core/theme/app_theme.dart';
 import '../data/settings_provider.dart';
@@ -278,44 +279,48 @@ class _SettingsAvatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: AppColors.surface2,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: const Row(
-        children: [
-          CircleAvatar(
-            radius: 22,
-            backgroundColor: AppColors.accent,
-            child: Text(
-              'A',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+    return GestureDetector(
+      onTap: () => context.push('/profile'),
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 16),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: AppColors.surface2,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: const Row(
+          children: [
+            CircleAvatar(
+              radius: 22,
+              backgroundColor: AppColors.accent,
+              child: Text(
+                'M',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+              ),
             ),
-          ),
-          SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'AnimeRoll',
-                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
-                ),
-                Text(
-                  'Tu anime, sin límites',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: AppColors.textSecondary,
+            SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Michael',
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
                   ),
-                ),
-              ],
+                  Text(
+                    'Ver perfil y estadisticas',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
+            Icon(Icons.chevron_right_rounded, color: AppColors.textSecondary),
+          ],
+        ),
       ),
     );
   }

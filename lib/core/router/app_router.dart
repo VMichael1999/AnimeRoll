@@ -7,6 +7,7 @@ import '../../features/schedule/presentation/schedule_screen.dart';
 import '../../features/favorites/presentation/favorites_screen.dart';
 import '../../features/downloads/presentation/downloads_screen.dart';
 import '../../features/downloads/presentation/download_player_screen.dart';
+import '../../features/profile/presentation/profile_screen.dart';
 import '../../features/settings/presentation/settings_screen.dart';
 import '../shell/main_shell.dart';
 
@@ -71,5 +72,6 @@ final appRouter = GoRouter(
         );
       },
     ),
+    GoRoute(path: '/profile', builder: (context, _) => const ProfileScreen()),
   ],
 );

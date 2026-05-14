@@ -8,6 +8,7 @@ import '../../../shared/widgets/anime_card.dart';
 import '../../../shared/widgets/section_header.dart';
 import '../../../shared/widgets/wide_card.dart';
 import '../../../shared/widgets/error_view.dart';
+import '../../downloads/data/downloads_provider.dart';
 import '../data/home_provider.dart';
 
 class HomeScreen extends ConsumerWidget {
@@ -311,20 +312,26 @@ class _GenreFilter extends ConsumerWidget {
 
 // ── Continue watching ─────────────────────────────────────────────────────────
 
-class _ContinueWatching extends StatelessWidget {
+class _ContinueWatching extends ConsumerWidget {
   final List<AnimeModel> list;
   const _ContinueWatching({required this.list});
 
   @override
-  Widget build(BuildContext context) {
-    if (list.isEmpty) return const SizedBox.shrink();
+  Widget build(BuildContext context, WidgetRef ref) {
+    final downloads = ref
+        .watch(downloadsProvider)
+        .where((item) => item.isSavedOnDevice)
+        .take(8)
+        .toList();
+    if (downloads.isEmpty && list.isEmpty) return const SizedBox.shrink();
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         SectionHeader(
           title: 'Continuar viendo',
           action: 'Ver todo',
-          onAction: () {},
+          onAction: () => context.go('/downloads'),
         ),
         const SizedBox(height: 10),
         SizedBox(
@@ -332,15 +339,32 @@ class _ContinueWatching extends StatelessWidget {
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 16),
-            itemCount: list.length,
+            itemCount: downloads.isNotEmpty ? downloads.length : list.length,
             separatorBuilder: (context, _) => const SizedBox(width: 10),
-            itemBuilder: (context, i) => WideCard(
-              anime: list[i],
-              subtitle: 'Ep 1',
-              onTap: () => context.push(
-                '/detail?url=${Uri.encodeComponent(list[i].url)}',
-              ),
-            ),
+            itemBuilder: (context, i) {
+              if (downloads.isNotEmpty) {
+                final item = downloads[i];
+                final anime = AnimeModel(
+                  title: item.albumTitle,
+                  url: item.animeUrl ?? item.url,
+                  cover: item.thumbnail,
+                );
+                return WideCard(
+                  anime: anime,
+                  subtitle: item.displayEpisodeTitle,
+                  onTap: () => context.push(
+                    '/download-player?id=${Uri.encodeComponent(item.id)}&title=${Uri.encodeComponent(item.displayEpisodeTitle)}&path=${Uri.encodeComponent(item.localPath!)}&animeTitle=${Uri.encodeComponent(item.albumTitle)}',
+                  ),
+                );
+              }
+              return WideCard(
+                anime: list[i],
+                subtitle: 'Ep 1',
+                onTap: () => context.push(
+                  '/detail?url=${Uri.encodeComponent(list[i].url)}',
+                ),
+              );
+            },
           ),
         ),
       ],

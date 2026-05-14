@@ -7,7 +7,6 @@ import '../../../shared/models/anime_model.dart';
 import '../../../shared/widgets/anime_card.dart';
 import '../../../shared/widgets/section_header.dart';
 import '../../../shared/widgets/wide_card.dart';
-import '../../../shared/widgets/error_view.dart';
 import '../../downloads/data/downloads_provider.dart';
 import '../data/home_provider.dart';
 
@@ -31,18 +30,8 @@ class HomeScreen extends ConsumerWidget {
           const SliverToBoxAdapter(child: SizedBox(height: 12)),
           const SliverToBoxAdapter(child: _GenreFilter()),
           const SliverToBoxAdapter(child: SizedBox(height: 16)),
-          SliverToBoxAdapter(
-            child: mainList.when(
-              data: (list) => _ContinueWatching(list: list.take(8).toList()),
-              loading: () => const _HorizontalSkeleton(),
-              error: (e, _) => ErrorView(
-                message: 'No se pudo conectar a la API',
-                onRetry: () =>
-                    ref.invalidate(genreAnimeProvider(selectedGenre)),
-              ),
-            ),
-          ),
-          const SliverToBoxAdapter(child: SizedBox(height: 20)),
+          const SliverToBoxAdapter(child: _ContinueWatching()),
+          const SliverToBoxAdapter(child: SizedBox(height: 16)),
           SliverToBoxAdapter(
             child: mainList.when(
               data: (list) => _AnimeRow(
@@ -313,8 +302,7 @@ class _GenreFilter extends ConsumerWidget {
 // ── Continue watching ─────────────────────────────────────────────────────────
 
 class _ContinueWatching extends ConsumerWidget {
-  final List<AnimeModel> list;
-  const _ContinueWatching({required this.list});
+  const _ContinueWatching();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -323,7 +311,7 @@ class _ContinueWatching extends ConsumerWidget {
         .where((item) => item.isSavedOnDevice)
         .take(8)
         .toList();
-    if (downloads.isEmpty && list.isEmpty) return const SizedBox.shrink();
+    if (downloads.isEmpty) return const SizedBox.shrink();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -339,29 +327,20 @@ class _ContinueWatching extends ConsumerWidget {
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 16),
-            itemCount: downloads.isNotEmpty ? downloads.length : list.length,
+            itemCount: downloads.length,
             separatorBuilder: (context, _) => const SizedBox(width: 10),
             itemBuilder: (context, i) {
-              if (downloads.isNotEmpty) {
-                final item = downloads[i];
-                final anime = AnimeModel(
-                  title: item.albumTitle,
-                  url: item.animeUrl ?? item.url,
-                  cover: item.thumbnail,
-                );
-                return WideCard(
-                  anime: anime,
-                  subtitle: item.displayEpisodeTitle,
-                  onTap: () => context.push(
-                    '/download-player?id=${Uri.encodeComponent(item.id)}&title=${Uri.encodeComponent(item.displayEpisodeTitle)}&path=${Uri.encodeComponent(item.localPath!)}&animeTitle=${Uri.encodeComponent(item.albumTitle)}',
-                  ),
-                );
-              }
+              final item = downloads[i];
+              final anime = AnimeModel(
+                title: item.albumTitle,
+                url: item.animeUrl ?? item.url,
+                cover: item.thumbnail,
+              );
               return WideCard(
-                anime: list[i],
-                subtitle: 'Ep 1',
+                anime: anime,
+                subtitle: item.displayEpisodeTitle,
                 onTap: () => context.push(
-                  '/detail?url=${Uri.encodeComponent(list[i].url)}',
+                  '/download-player?id=${Uri.encodeComponent(item.id)}&title=${Uri.encodeComponent(item.displayEpisodeTitle)}&path=${Uri.encodeComponent(item.localPath!)}&animeTitle=${Uri.encodeComponent(item.albumTitle)}',
                 ),
               );
             },

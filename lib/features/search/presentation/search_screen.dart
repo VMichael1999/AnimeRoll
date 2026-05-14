@@ -239,7 +239,7 @@ class _SearchResults extends ConsumerWidget {
       },
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (e, _) => ErrorView(
-        message: 'Error al buscar. Verifica que la API esté corriendo.',
+        message: 'No se pudo buscar. Intenta nuevamente.',
         onRetry: () => ref.invalidate(searchResultsProvider),
       ),
     );
@@ -306,11 +306,32 @@ class _ModeButton extends StatelessWidget {
   }
 }
 
-class _SearchInput extends StatelessWidget {
+class _SearchInput extends StatefulWidget {
   final TextEditingController controller;
   final ValueChanged<String> onChanged;
 
   const _SearchInput({required this.controller, required this.onChanged});
+
+  @override
+  State<_SearchInput> createState() => _SearchInputState();
+}
+
+class _SearchInputState extends State<_SearchInput> {
+  @override
+  void initState() {
+    super.initState();
+    widget.controller.addListener(_handleTextChange);
+  }
+
+  @override
+  void dispose() {
+    widget.controller.removeListener(_handleTextChange);
+    super.dispose();
+  }
+
+  void _handleTextChange() {
+    if (mounted) setState(() {});
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -332,8 +353,8 @@ class _SearchInput extends StatelessWidget {
           const SizedBox(width: 8),
           Expanded(
             child: TextField(
-              controller: controller,
-              onChanged: onChanged,
+              controller: widget.controller,
+              onChanged: widget.onChanged,
               autofocus: true,
               style: const TextStyle(
                 fontSize: 13,
@@ -347,11 +368,11 @@ class _SearchInput extends StatelessWidget {
               ),
             ),
           ),
-          if (controller.text.isNotEmpty)
+          if (widget.controller.text.isNotEmpty)
             GestureDetector(
               onTap: () {
-                controller.clear();
-                onChanged('');
+                widget.controller.clear();
+                widget.onChanged('');
               },
               child: const Icon(
                 Icons.close,

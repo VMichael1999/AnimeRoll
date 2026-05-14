@@ -13,6 +13,7 @@ final aiRecapProvider = FutureProvider.autoDispose
             percent: request.percent,
             synopsis: request.synopsis,
             episodeNumber: request.episodeNumber,
+            detail: request.detail,
           );
     });
 
@@ -22,6 +23,7 @@ class AiRecapRequest {
   final double percent;
   final String? synopsis;
   final int? episodeNumber;
+  final String detail;
 
   const AiRecapRequest({
     required this.animeTitle,
@@ -29,6 +31,7 @@ class AiRecapRequest {
     required this.percent,
     this.synopsis,
     this.episodeNumber,
+    this.detail = 'medium',
   });
 
   @override
@@ -38,10 +41,11 @@ class AiRecapRequest {
         other.episodeTitle == episodeTitle &&
         other.percent == percent &&
         other.synopsis == synopsis &&
-        other.episodeNumber == episodeNumber;
+        other.episodeNumber == episodeNumber &&
+        other.detail == detail;
   }
 
   @override
   int get hashCode =>
-      Object.hash(animeTitle, episodeTitle, percent, synopsis, episodeNumber);
+      Object.hash(animeTitle, episodeTitle, percent, synopsis, episodeNumber, detail);
 }

@@ -53,6 +53,7 @@ class AnimeRepository {
     required double percent,
     String? synopsis,
     int? episodeNumber,
+    String detail = 'medium',
   }) async {
     final response = await _dio.post(
       '/anime/recap',
@@ -62,6 +63,7 @@ class AnimeRepository {
         'percent': percent,
         'synopsis': synopsis,
         'episodeNumber': episodeNumber,
+        'detail': detail,
       }..removeWhere((_, v) => v == null),
     );
     return AiRecapResult.fromJson(_responseData(response));

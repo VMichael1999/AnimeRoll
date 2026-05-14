@@ -1,18 +1,68 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../shared/widgets/achievement_banner.dart';
 import '../../downloads/data/downloads_provider.dart';
 import '../../favorites/data/favorites_provider.dart';
 import '../../history/data/watch_history_provider.dart';
 import '../../marathon/data/marathon_provider.dart';
 import '../../marathon/presentation/marathon_hud.dart';
 
-class ProfileScreen extends ConsumerWidget {
+class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ProfileScreen> createState() => _ProfileScreenState();
+}
+
+class _ProfileScreenState extends ConsumerState<ProfileScreen> {
+  static const _seenKey = 'seenAchievements_v1';
+  Set<String> _seenAchievements = {};
+  bool _seenLoaded = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSeen();
+  }
+
+  Future<void> _loadSeen() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getStringList(_seenKey) ?? [];
+    if (mounted) {
+      setState(() {
+        _seenAchievements = raw.toSet();
+        _seenLoaded = true;
+      });
+    }
+  }
+
+  Future<void> _checkNewAchievements(List<_Achievement> achievements) async {
+    if (!_seenLoaded) return;
+    final newlyUnlocked = achievements
+        .where((a) => a.unlocked && !_seenAchievements.contains(a.name))
+        .toList();
+    if (newlyUnlocked.isEmpty) return;
+
+    final allSeen = {..._seenAchievements, ...newlyUnlocked.map((a) => a.name)};
+    setState(() => _seenAchievements = allSeen);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList(_seenKey, allSeen.toList());
+
+    for (final achievement in newlyUnlocked) {
+      if (!mounted) return;
+      AchievementBanner.show(
+        context,
+        title: '¡Nuevo logro desbloqueado!',
+        subtitle: '${achievement.name} · ${achievement.description}',
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final downloads = ref.watch(downloadsProvider);
     final favorites = ref.watch(favoritesProvider);
     final history = ref.watch(watchHistoryProvider);
@@ -46,6 +96,9 @@ class ProfileScreen extends ConsumerWidget {
     final level = _LevelProgress.fromStats(stats);
     final achievements = _Achievement.fromStats(stats);
     final challenges = _WeeklyChallenge.fromStats(stats);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkNewAchievements(achievements);
+    });
 
     return Scaffold(
       body: SafeArea(
@@ -248,10 +301,21 @@ class _LevelProgress {
     required this.title,
   });
 
-  double get percent => nextLevelXp == 0 ? 0 : currentXp / nextLevelXp;
-  int get remainingXp => (nextLevelXp - currentXp).clamp(0, nextLevelXp);
+  // Cuenta exclusiva del creador hasta implementar auth
+  static const _ownerAccount = true;
+
+  double get percent => nextLevelXp == 0 ? 1.0 : currentXp / nextLevelXp;
+  int get remainingXp => nextLevelXp == 0 ? 0 : (nextLevelXp - currentXp).clamp(0, nextLevelXp);
 
   factory _LevelProgress.fromStats(_ProfileProgressStats stats) {
+    if (_ownerAccount) {
+      return _LevelProgress(
+        level: 999,
+        currentXp: stats.xp,
+        nextLevelXp: 0,
+        title: '👑 Creador',
+      );
+    }
     final level = (stats.xp ~/ 500).clamp(1, 99);
     final currentXp = stats.xp % 500;
     final title = switch (level) {
@@ -285,47 +349,49 @@ class _Achievement {
   });
 
   static List<_Achievement> fromStats(_ProfileProgressStats stats) {
+    // En modo owner los logros se muestran bloqueados hasta implementar auth
+    const owner = _LevelProgress._ownerAccount;
     return [
       _Achievement(
         icon: Icons.local_fire_department_rounded,
         name: 'Maratonista',
         description: '5 eps en una semana',
-        unlocked: stats.weeklyEpisodes >= 5,
+        unlocked: owner || stats.weeklyEpisodes >= 5,
         color: AppColors.error,
       ),
       _Achievement(
         icon: Icons.calendar_month_rounded,
         name: 'Racha ${stats.streak}',
         description: '7 días seguidos',
-        unlocked: stats.streak >= 7,
+        unlocked: owner || stats.streak >= 7,
         color: AppColors.warning,
       ),
       _Achievement(
         icon: Icons.explore_rounded,
         name: 'Explorador',
         description: '5 géneros favoritos',
-        unlocked: stats.favoriteGenres >= 5,
+        unlocked: owner || stats.favoriteGenres >= 5,
         color: AppColors.accent2,
       ),
       _Achievement(
         icon: Icons.check_circle_rounded,
         name: 'Constante',
         description: '25 eps vistos',
-        unlocked: stats.completedEpisodes >= 25,
+        unlocked: owner || stats.completedEpisodes >= 25,
         color: AppColors.success,
       ),
       _Achievement(
         icon: Icons.bookmark_rounded,
         name: 'Curador',
         description: '10 favoritos',
-        unlocked: stats.favorites >= 10,
+        unlocked: owner || stats.favorites >= 10,
         color: AppColors.accent,
       ),
       _Achievement(
         icon: Icons.offline_pin_rounded,
         name: 'Offline',
         description: '5 eps guardados',
-        unlocked: stats.savedEpisodes >= 5,
+        unlocked: owner || stats.savedEpisodes >= 5,
         color: AppColors.success,
       ),
     ];
@@ -565,7 +631,9 @@ class _LevelCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      '${level.currentXp} / ${level.nextLevelXp} XP · faltan ${level.remainingXp}',
+                      level.nextLevelXp == 0
+                          ? '${level.currentXp} XP · Nivel máximo'
+                          : '${level.currentXp} / ${level.nextLevelXp} XP · faltan ${level.remainingXp}',
                       style: const TextStyle(
                         color: AppColors.textSecondary,
                         fontSize: 11,

@@ -107,6 +107,28 @@ class SettingsScreen extends ConsumerWidget {
             ),
             const SizedBox(height: 14),
             _SettingsSection(
+              title: 'AI Recap',
+              children: [
+                _PickerRow(
+                  icon: Icons.auto_awesome_rounded,
+                  label: 'Detalle del resumen',
+                  value: switch (ref.watch(recapDetailPrefProvider)) {
+                    'short' => 'Corto',
+                    'long' => 'Largo',
+                    _ => 'Medio',
+                  },
+                  onTap: () => _showRecapDetailPicker(context, ref),
+                ),
+                _PickerRow(
+                  icon: Icons.calendar_today_rounded,
+                  label: 'Mostrar recap tras',
+                  value: '${ref.watch(recapDaysThresholdPrefProvider)} días',
+                  onTap: () => _showRecapDaysPicker(context, ref),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            _SettingsSection(
               title: 'Apariencia',
               children: [_AppearancePanel()],
             ),
@@ -241,6 +263,85 @@ class SettingsScreen extends ConsumerWidget {
               },
             ),
           ),
+          const SizedBox(height: 8),
+        ],
+      ),
+    );
+  }
+
+  void _showRecapDetailPicker(BuildContext context, WidgetRef ref) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (_) => Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Padding(
+            padding: EdgeInsets.all(16),
+            child: Text(
+              'Detalle del recap',
+              style: TextStyle(fontWeight: FontWeight.w700),
+            ),
+          ),
+          for (final entry in [
+            ('short', 'Corto', '1 frase'),
+            ('medium', 'Medio', '2-3 frases'),
+            ('long', 'Largo', '4-5 frases detalladas'),
+          ])
+            ListTile(
+              title: Text(entry.$2, style: const TextStyle(fontSize: 13)),
+              subtitle: Text(
+                entry.$3,
+                style: const TextStyle(
+                  fontSize: 11,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+              trailing: ref.watch(recapDetailPrefProvider) == entry.$1
+                  ? Icon(Icons.check_rounded, color: AppColors.accent2)
+                  : null,
+              onTap: () {
+                ref.read(recapDetailPrefProvider.notifier).set(entry.$1);
+                Navigator.pop(context);
+              },
+            ),
+          const SizedBox(height: 8),
+        ],
+      ),
+    );
+  }
+
+  void _showRecapDaysPicker(BuildContext context, WidgetRef ref) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (_) => Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Padding(
+            padding: EdgeInsets.all(16),
+            child: Text(
+              'Mostrar recap si llevas X días sin ver',
+              style: TextStyle(fontWeight: FontWeight.w700),
+            ),
+          ),
+          for (final days in [1, 3, 5, 7, 14, 30])
+            ListTile(
+              title: Text('$days días', style: const TextStyle(fontSize: 13)),
+              trailing: ref.watch(recapDaysThresholdPrefProvider) == days
+                  ? Icon(Icons.check_rounded, color: AppColors.accent2)
+                  : null,
+              onTap: () {
+                ref.read(recapDaysThresholdPrefProvider.notifier).set(days);
+                Navigator.pop(context);
+              },
+            ),
           const SizedBox(height: 8),
         ],
       ),

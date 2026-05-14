@@ -831,6 +831,8 @@ class _MoodResultTile extends StatelessWidget {
                       fontWeight: FontWeight.w700,
                     ),
                   ),
+                  const SizedBox(height: 6),
+                  _MoodScoreBar(match: result.match),
                 ],
               ),
             ),
@@ -841,6 +843,48 @@ class _MoodResultTile extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _MoodScoreBar extends StatelessWidget {
+  final int match;
+
+  const _MoodScoreBar({required this.match});
+
+  static List<Color> _gradientColors(int match) {
+    if (match >= 90) return [Color(0xFFEF4444), Color(0xFFA855F7)];
+    if (match >= 75) return [Color(0xFF7C3AED), Color(0xFFA855F7)];
+    if (match >= 60) return [Color(0xFFF59E0B), Color(0xFFEF4444)];
+    return [AppColors.textSecondary, AppColors.textSecondary];
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = _gradientColors(match);
+    final progress = (match / 100).clamp(0.0, 1.0);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return Container(
+          height: 4,
+          decoration: BoxDecoration(
+            color: AppColors.border,
+            borderRadius: BorderRadius.circular(2),
+          ),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: FractionallySizedBox(
+              widthFactor: progress,
+              child: Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(colors: colors),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }

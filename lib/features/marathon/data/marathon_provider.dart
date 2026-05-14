@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -14,21 +15,24 @@ class MarathonSession {
   final String updatedAt;
   final int watchedMs;
   final Set<String> episodeKeys;
+  final int recordEpisodeCount;
 
   const MarathonSession({
     required this.startedAt,
     required this.updatedAt,
     required this.watchedMs,
     required this.episodeKeys,
+    this.recordEpisodeCount = 0,
   });
 
-  factory MarathonSession.empty() {
+  factory MarathonSession.empty({int record = 0}) {
     final now = DateTime.now().toIso8601String();
     return MarathonSession(
       startedAt: now,
       updatedAt: now,
       watchedMs: 0,
       episodeKeys: const {},
+      recordEpisodeCount: record,
     );
   }
 
@@ -42,6 +46,8 @@ class MarathonSession {
       episodeKeys: keys is List
           ? keys.map((item) => item.toString()).toSet()
           : const {},
+      recordEpisodeCount:
+          (json['recordEpisodeCount'] as num?)?.toInt() ?? 0,
     );
   }
 
@@ -50,10 +56,18 @@ class MarathonSession {
   bool get isActive => watchedMs >= const Duration(minutes: 5).inMilliseconds;
   bool get breakRecommended =>
       watchedMs >= const Duration(hours: 2, minutes: 30).inMilliseconds;
+  bool get isNewRecord =>
+      episodeCount > 0 && episodeCount > recordEpisodeCount;
   Duration get nextBreakIn {
     const breakEvery = Duration(hours: 2, minutes: 30);
     final remainder = watched.inMilliseconds % breakEvery.inMilliseconds;
     return breakEvery - Duration(milliseconds: remainder);
+  }
+
+  double get breakProgress {
+    final breakEveryMs =
+        const Duration(hours: 2, minutes: 30).inMilliseconds;
+    return (watchedMs / breakEveryMs).clamp(0.0, 1.0);
   }
 
   MarathonSession copyWith({
@@ -61,12 +75,14 @@ class MarathonSession {
     String? updatedAt,
     int? watchedMs,
     Set<String>? episodeKeys,
+    int? recordEpisodeCount,
   }) {
     return MarathonSession(
       startedAt: startedAt ?? this.startedAt,
       updatedAt: updatedAt ?? this.updatedAt,
       watchedMs: watchedMs ?? this.watchedMs,
       episodeKeys: episodeKeys ?? this.episodeKeys,
+      recordEpisodeCount: recordEpisodeCount ?? this.recordEpisodeCount,
     );
   }
 
@@ -75,6 +91,7 @@ class MarathonSession {
     'updatedAt': updatedAt,
     'watchedMs': watchedMs,
     'episodeKeys': episodeKeys.toList(),
+    'recordEpisodeCount': recordEpisodeCount,
   };
 }
 
@@ -97,19 +114,23 @@ class MarathonNotifier extends StateNotifier<MarathonSession> {
     final lastUpdated = DateTime.tryParse(state.updatedAt);
     final shouldReset =
         lastUpdated == null || now.difference(lastUpdated) > _maxIdle;
-    final base = shouldReset ? MarathonSession.empty() : state;
+    final prevRecord = max(state.recordEpisodeCount, state.episodeCount);
+    final base = shouldReset
+        ? MarathonSession.empty(record: prevRecord)
+        : state;
+    final newKeys = {...base.episodeKeys, episodeKey};
     state = base.copyWith(
       updatedAt: now.toIso8601String(),
       watchedMs: base.watchedMs + delta.inMilliseconds,
-      episodeKeys: {...base.episodeKeys, episodeKey},
+      episodeKeys: newKeys,
     );
     await _persist();
   }
 
   Future<void> reset() async {
-    state = MarathonSession.empty();
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_storageKey);
+    final record = max(state.recordEpisodeCount, state.episodeCount);
+    state = MarathonSession.empty(record: record);
+    await _persist();
   }
 
   Future<void> _load() async {

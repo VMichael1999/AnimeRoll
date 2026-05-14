@@ -150,3 +150,17 @@ final appIconStyleProvider =
     StateNotifierProvider<PersistedSettingNotifier<String>, String>(
       (ref) => AppIconStyleNotifier(),
     );
+
+final recapDetailPrefProvider =
+    StateNotifierProvider<PersistedSettingNotifier<String>, String>(
+      (ref) => PersistedSettingNotifier(
+        key: 'recapDetailPref',
+        defaultValue: 'medium',
+      ),
+    );
+
+final recapDaysThresholdPrefProvider =
+    StateNotifierProvider<PersistedSettingNotifier<int>, int>(
+      (ref) =>
+          PersistedSettingNotifier(key: 'recapDaysThreshold', defaultValue: 7),
+    );

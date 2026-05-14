@@ -52,6 +52,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   DateTime? _lastHistorySaveAt;
   Duration? _lastMarathonPosition;
   String? _lastMarathonEpisodeKey;
+  bool _breakModalShown = false;
 
   @override
   void dispose() {
@@ -176,6 +177,22 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     _lastMarathonEpisodeKey = null;
   }
 
+  void _showBreakModal() {
+    final session = ref.read(marathonProvider);
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => _MarathonBreakDialog(
+        session: session,
+        onTakeBreak: () {
+          _videoController?.pause();
+          Navigator.of(context).pop();
+        },
+        onContinue: () => Navigator.of(context).pop(),
+      ),
+    );
+  }
+
   void _saveCurrentProgress({bool force = false}) {
     final controller = _videoController;
     if (controller == null || !controller.value.isInitialized) return;
@@ -297,6 +314,17 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     final serversAsync = ref.watch(serversProvider(widget.episodeUrl));
     final selectedIndex = ref.watch(selectedServerProvider);
     final marathon = ref.watch(marathonProvider);
+
+    ref.listen<MarathonSession>(marathonProvider, (prev, next) {
+      if (next.breakRecommended &&
+          !(prev?.breakRecommended ?? false) &&
+          !_breakModalShown) {
+        _breakModalShown = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _showBreakModal();
+        });
+      }
+    });
     final animeUrl = widget.animeUrl.isNotEmpty
         ? widget.animeUrl
         : _inferAnimeUrl(widget.episodeUrl);
@@ -488,6 +516,33 @@ class _PlayerInfo extends ConsumerWidget {
     this.sleepTimerRemaining,
   });
 
+  static AiRecapRequest? _buildRecapRequest({
+    required WatchHistoryEntry? historyEntry,
+    required AnimeDetailData? detail,
+    required EpisodeModel? episode,
+    required String recapDetail,
+    required int daysThreshold,
+  }) {
+    if (historyEntry == null ||
+        historyEntry.completed ||
+        historyEntry.percent <= 0.08) {
+      return null;
+    }
+    final updatedAt = DateTime.tryParse(historyEntry.updatedAt);
+    if (updatedAt != null) {
+      final daysSince = DateTime.now().difference(updatedAt).inDays;
+      if (daysSince < daysThreshold) return null;
+    }
+    return AiRecapRequest(
+      animeTitle: detail?.anime.title ?? historyEntry.animeTitle,
+      episodeTitle: episode?.title ?? historyEntry.episodeTitle,
+      percent: historyEntry.percent,
+      synopsis: detail?.anime.synopsis,
+      episodeNumber: episode?.number ?? historyEntry.episodeNumber,
+      detail: recapDetail,
+    );
+  }
+
   void _showSleepTimerSheet(BuildContext context) {
     showModalBottomSheet<void>(
       context: context,
@@ -587,22 +642,34 @@ class _PlayerInfo extends ConsumerWidget {
             items.where((item) => item.episodeUrl == episodeUrl).firstOrNull,
       ),
     );
+    final recapDetail = ref.watch(recapDetailPrefProvider);
+    final recapDaysThreshold = ref.watch(recapDaysThresholdPrefProvider);
     final detail = detailAsync?.valueOrNull;
     final episode = detail?.episodes
         .where((item) => item.url == episodeUrl)
         .firstOrNull;
-    final recapRequest =
-        historyEntry != null &&
-            !historyEntry.completed &&
-            historyEntry.percent > 0.08
-        ? AiRecapRequest(
-            animeTitle: detail?.anime.title ?? historyEntry.animeTitle,
-            episodeTitle: episode?.title ?? historyEntry.episodeTitle,
-            percent: historyEntry.percent,
-            synopsis: detail?.anime.synopsis,
-            episodeNumber: episode?.number ?? historyEntry.episodeNumber,
-          )
-        : null;
+    final recapRequest = _buildRecapRequest(
+      historyEntry: historyEntry,
+      detail: detail,
+      episode: episode,
+      recapDetail: recapDetail,
+      daysThreshold: recapDaysThreshold,
+    );
+    final recapDaysSince = historyEntry != null
+        ? DateTime.now()
+              .difference(
+                DateTime.tryParse(historyEntry.updatedAt) ?? DateTime.now(),
+              )
+              .inDays
+        : 0;
+    final recapPositionMs = historyEntry?.positionMs ?? 0;
+    final episodes = detail?.episodes ?? [];
+    final currentEpIndex =
+        episodes.indexWhere((e) => e.url == episodeUrl);
+    final recapNextEpNumber =
+        currentEpIndex >= 0 && currentEpIndex < episodes.length - 1
+            ? episodes[currentEpIndex + 1].number
+            : null;
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -688,7 +755,14 @@ class _PlayerInfo extends ConsumerWidget {
           ),
           const SizedBox(height: 16),
           if (recapRequest != null) ...[
-            _AiRecapCard(request: recapRequest),
+            _AiRecapCard(
+              request: recapRequest,
+              daysSince: recapDaysSince,
+              positionMs: recapPositionMs,
+              nextEpisodeNumber: recapNextEpNumber,
+              episodeThumbnail: episode?.thumbnail,
+              animeCover: detail?.anime.cover,
+            ),
             const SizedBox(height: 16),
           ],
           MarathonHud(session: marathon, onReset: onResetMarathon),
@@ -715,112 +789,394 @@ class _PlayerInfo extends ConsumerWidget {
   }
 }
 
-class _AiRecapCard extends ConsumerWidget {
+class _AiRecapCard extends ConsumerStatefulWidget {
   final AiRecapRequest request;
+  final int daysSince;
+  final int positionMs;
+  final int? nextEpisodeNumber;
+  final String? episodeThumbnail;
+  final String? animeCover;
 
-  const _AiRecapCard({required this.request});
+  const _AiRecapCard({
+    required this.request,
+    required this.daysSince,
+    required this.positionMs,
+    this.nextEpisodeNumber,
+    this.episodeThumbnail,
+    this.animeCover,
+  });
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final recap = ref.watch(aiRecapProvider(request));
+  ConsumerState<_AiRecapCard> createState() => _AiRecapCardState();
+}
+
+class _AiRecapCardState extends ConsumerState<_AiRecapCard> {
+  bool _dismissed = false;
+
+  static const _dotColors = [
+    Color(0xFFEF4444),
+    Color(0xFF7C3AED),
+    Color(0xFF22C55E),
+    Color(0xFFF59E0B),
+    Color(0xFF3B82F6),
+    Color(0xFFEC4899),
+  ];
+
+  String _formatDuration(int ms) {
+    final d = Duration(milliseconds: ms);
+    final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
+    return '$m:$s';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_dismissed) return const SizedBox.shrink();
+
+    final recap = ref.watch(aiRecapProvider(widget.request));
+    final epNum = widget.request.episodeNumber;
+    final nextEpNum = widget.nextEpisodeNumber;
+    final thumbnail = widget.episodeThumbnail ?? widget.animeCover;
+
     return Container(
-      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(10),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            AppColors.accent.withValues(alpha: 0.15),
+            AppColors.accent2.withValues(alpha: 0.08),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(color: AppColors.accent.withValues(alpha: 0.35)),
       ),
-      child: recap.when(
-        data: (data) => Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+            child: Row(
               children: [
                 Container(
-                  width: 32,
-                  height: 32,
-                  decoration: BoxDecoration(
-                    color: AppColors.accent.withValues(alpha: 0.16),
-                    borderRadius: BorderRadius.circular(8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 3,
                   ),
-                  child: Icon(
-                    Icons.auto_awesome_rounded,
-                    color: AppColors.accent2,
-                    size: 18,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [AppColors.accent, AppColors.accent2],
+                    ),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: const Text(
+                    '✶ AI RECAP',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 9,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.5,
+                    ),
                   ),
                 ),
-                const SizedBox(width: 9),
+                const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    data.ai ? 'AI Recap' : 'Resumen rapido',
+                    widget.request.animeTitle,
                     style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w900,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
                     ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 10),
-            Text(
-              data.recap,
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 2, 12, 10),
+            child: Text(
+              epNum != null
+                  ? 'Ultima vez: Ep. $epNum · hace ${widget.daysSince} dia${widget.daysSince == 1 ? '' : 's'}'
+                  : 'hace ${widget.daysSince} dia${widget.daysSince == 1 ? '' : 's'}',
               style: const TextStyle(
                 color: AppColors.textSecondary,
-                fontSize: 12,
-                height: 1.35,
-                fontWeight: FontWeight.w600,
+                fontSize: 10,
+                fontWeight: FontWeight.w500,
               ),
             ),
-            if (data.highlights.isNotEmpty) ...[
-              const SizedBox(height: 10),
-              Wrap(
-                spacing: 7,
-                runSpacing: 7,
-                children: data.highlights
-                    .map(
-                      (item) => Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 4,
-                        ),
-                        decoration: BoxDecoration(
-                          color: AppColors.surface2,
-                          borderRadius: BorderRadius.circular(7),
-                          border: Border.all(color: AppColors.border),
-                        ),
-                        child: Text(
-                          item,
-                          style: const TextStyle(
-                            color: AppColors.textSecondary,
-                            fontSize: 10,
-                            fontWeight: FontWeight.w800,
+          ),
+          if (thumbnail != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: AspectRatio(
+                  aspectRatio: 16 / 9,
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      Container(
+                        decoration: const BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            colors: [Color(0xFF1A1228), Color(0xFF0E0D1A)],
                           ),
                         ),
                       ),
-                    )
-                    .toList(),
+                      Image.network(
+                        thumbnail,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stack) => const SizedBox.shrink(),
+                      ),
+                      Center(
+                        child: Container(
+                          width: 40,
+                          height: 40,
+                          decoration: BoxDecoration(
+                            color: AppColors.accent.withValues(alpha: 0.85),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.play_arrow_rounded,
+                            color: Colors.white,
+                            size: 22,
+                          ),
+                        ),
+                      ),
+                      Positioned(
+                        left: 8,
+                        bottom: 8,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 7,
+                            vertical: 3,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withValues(alpha: 0.65),
+                            borderRadius: BorderRadius.circular(5),
+                          ),
+                          child: Text(
+                            nextEpNum != null
+                                ? 'Continuar en Ep. $nextEpNum · ${_formatDuration(widget.positionMs)}'
+                                : epNum != null
+                                ? 'Ep. $epNum · ${_formatDuration(widget.positionMs)}'
+                                : _formatDuration(widget.positionMs),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
-            ],
-          ],
-        ),
-        loading: () => const Row(
-          children: [
-            SizedBox(
-              width: 16,
-              height: 16,
-              child: CircularProgressIndicator(strokeWidth: 2),
             ),
-            SizedBox(width: 10),
-            Text(
-              'Preparando recap...',
-              style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+          recap.when(
+            data: (data) => Padding(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    data.recap,
+                    style: const TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 11,
+                      height: 1.6,
+                    ),
+                  ),
+                  if (data.highlights.isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: data.highlights.asMap().entries.map((e) {
+                        final color = _dotColors[e.key % _dotColors.length];
+                        return Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppColors.surface2,
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(color: AppColors.border),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                width: 8,
+                                height: 8,
+                                decoration: BoxDecoration(
+                                  color: color,
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                              const SizedBox(width: 5),
+                              Text(
+                                e.value,
+                                style: const TextStyle(
+                                  color: AppColors.textSecondary,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ],
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () => setState(() => _dismissed = true),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 9),
+                            decoration: BoxDecoration(
+                              color: AppColors.accent,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              nextEpNum != null
+                                  ? '▶ Continuar Ep. $nextEpNum'
+                                  : '▶ Continuar',
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () => setState(() => _dismissed = true),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 9),
+                            decoration: BoxDecoration(
+                              color: AppColors.surface2,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: AppColors.border),
+                            ),
+                            child: const Text(
+                              'Saltar recap',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                color: AppColors.textSecondary,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
-          ],
-        ),
-        error: (_, _) => const Text(
-          'No se pudo cargar el recap.',
-          style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
-        ),
+            loading: () => Padding(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 14),
+              child: Row(
+                children: [
+                  Container(
+                    width: 6,
+                    height: 6,
+                    decoration: BoxDecoration(
+                      color: AppColors.accent2,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  const Text(
+                    'Generando resumen...',
+                    style: TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 12,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  const _TypingDots(),
+                ],
+              ),
+            ),
+            error: (e, st) => const Padding(
+              padding: EdgeInsets.fromLTRB(12, 0, 12, 14),
+              child: Text(
+                'No se pudo cargar el recap.',
+                style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TypingDots extends StatefulWidget {
+  const _TypingDots();
+
+  @override
+  State<_TypingDots> createState() => _TypingDotsState();
+}
+
+class _TypingDotsState extends State<_TypingDots>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) => Row(
+        mainAxisSize: MainAxisSize.min,
+        children: List.generate(3, (i) {
+          final opacity =
+              ((_controller.value * 3) - i).clamp(0.0, 1.0);
+          return Opacity(
+            opacity: opacity,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 1.5),
+              child: Text(
+                '.',
+                style: TextStyle(
+                  color: AppColors.accent2,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ),
+          );
+        }),
       ),
     );
   }
@@ -1809,6 +2165,252 @@ class _ServerVariantRow extends StatelessWidget {
                   );
                 },
               ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MarathonBreakDialog extends StatefulWidget {
+  final MarathonSession session;
+  final VoidCallback onTakeBreak;
+  final VoidCallback onContinue;
+
+  const _MarathonBreakDialog({
+    required this.session,
+    required this.onTakeBreak,
+    required this.onContinue,
+  });
+
+  @override
+  State<_MarathonBreakDialog> createState() => _MarathonBreakDialogState();
+}
+
+class _MarathonBreakDialogState extends State<_MarathonBreakDialog> {
+  static const _totalSeconds = 5 * 60;
+  late int _remaining;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _remaining = _totalSeconds;
+    _timer = Timer.periodic(const Duration(seconds: 1), (t) {
+      if (!mounted) return;
+      setState(() {
+        if (_remaining > 0) {
+          _remaining--;
+        } else {
+          _timer?.cancel();
+          widget.onContinue();
+        }
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  String get _formatted {
+    final m = (_remaining ~/ 60).toString().padLeft(2, '0');
+    final s = (_remaining % 60).toString().padLeft(2, '0');
+    return '$m:$s';
+  }
+
+  static String _fmtDuration(Duration d) {
+    final h = d.inHours;
+    final m = d.inMinutes.remainder(60);
+    if (h <= 0) return '${m}m';
+    return '${h}h ${m.toString().padLeft(2, '0')}m';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final session = widget.session;
+    final eps = session.episodeCount;
+    final prevRecord = session.recordEpisodeCount;
+    final isNewRecord = session.isNewRecord;
+
+    return Dialog(
+      backgroundColor: AppColors.surface,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('🧘', style: TextStyle(fontSize: 40)),
+            const SizedBox(height: 12),
+            const Text(
+              '¡Momento de descansar!',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            RichText(
+              textAlign: TextAlign.center,
+              text: TextSpan(
+                style: const TextStyle(
+                  color: AppColors.textSecondary,
+                  fontSize: 13,
+                ),
+                children: [
+                  const TextSpan(text: 'Llevas '),
+                  TextSpan(
+                    text: '$eps episodios',
+                    style: const TextStyle(
+                      color: AppColors.warning,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const TextSpan(
+                    text: ' seguidos. Tu próximo ep empieza en:',
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            ShaderMask(
+              shaderCallback: (rect) => LinearGradient(
+                colors: [AppColors.accent, AppColors.accent2],
+              ).createShader(rect),
+              child: Text(
+                _formatted,
+                style: const TextStyle(
+                  fontSize: 36,
+                  fontWeight: FontWeight.w900,
+                  color: Colors.white,
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+            // Stats grid
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                'Estadísticas del maratón 🏆',
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            GridView.count(
+              crossAxisCount: 2,
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              mainAxisSpacing: 6,
+              crossAxisSpacing: 6,
+              childAspectRatio: 1.8,
+              children: [
+                _BreakStat(
+                  value: '$eps',
+                  label: 'Eps esta sesión',
+                  valueColor: AppColors.error,
+                ),
+                _BreakStat(
+                  value: prevRecord > 0 ? '🔥 $prevRecord' : '--',
+                  label: 'Récord anterior',
+                  valueColor: AppColors.warning,
+                ),
+                _BreakStat(
+                  value: isNewRecord ? '+${eps - prevRecord} 🎉' : '--',
+                  label: 'Nuevo récord',
+                  valueColor: AppColors.success,
+                  highlighted: isNewRecord,
+                ),
+                _BreakStat(
+                  value: _fmtDuration(session.watched),
+                  label: 'Tiempo sesión',
+                  valueColor: AppColors.accent2,
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                onPressed: widget.onTakeBreak,
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.accent,
+                ),
+                child: const Text('Tomar pausa (recomendado)'),
+              ),
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: TextButton(
+                onPressed: widget.onContinue,
+                child: const Text(
+                  'Continuar igual',
+                  style: TextStyle(color: AppColors.textSecondary),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _BreakStat extends StatelessWidget {
+  final String value;
+  final String label;
+  final Color valueColor;
+  final bool highlighted;
+
+  const _BreakStat({
+    required this.value,
+    required this.label,
+    required this.valueColor,
+    this.highlighted = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+      decoration: BoxDecoration(
+        color: highlighted
+            ? AppColors.success.withValues(alpha: 0.08)
+            : AppColors.surface2,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: highlighted
+              ? AppColors.success.withValues(alpha: 0.2)
+              : AppColors.border,
+        ),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(
+            value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w900,
+              color: valueColor,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            label.toUpperCase(),
+            maxLines: 1,
+            style: const TextStyle(
+              color: AppColors.textSecondary,
+              fontSize: 8,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.4,
             ),
           ),
         ],

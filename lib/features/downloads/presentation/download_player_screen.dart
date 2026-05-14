@@ -37,6 +37,7 @@ class _DownloadPlayerScreenState extends ConsumerState<DownloadPlayerScreen> {
   double _speed = 1;
   late String? _activeDownloadId;
   late String _activePath;
+  bool _hasStartedCurrentVideo = false;
   Timer? _hideControlsTimer;
 
   @override
@@ -55,6 +56,7 @@ class _DownloadPlayerScreenState extends ConsumerState<DownloadPlayerScreen> {
       _controller = null;
       _error = null;
       _showControls = true;
+      _hasStartedCurrentVideo = false;
     });
     await previous?.dispose();
 
@@ -66,6 +68,8 @@ class _DownloadPlayerScreenState extends ConsumerState<DownloadPlayerScreen> {
 
       await controller.initialize();
       await controller.setPlaybackSpeed(_speed);
+      await controller.seekTo(Duration.zero);
+      await controller.pause();
       if (!mounted) {
         await controller.dispose();
         return;
@@ -198,9 +202,17 @@ class _DownloadPlayerScreenState extends ConsumerState<DownloadPlayerScreen> {
   Future<void> _togglePlay() async {
     final controller = _controller;
     if (controller == null) return;
-    controller.value.isPlaying
-        ? await controller.pause()
-        : await controller.play();
+    if (controller.value.isPlaying) {
+      await controller.pause();
+    } else {
+      if (!_hasStartedCurrentVideo) {
+        await controller.seekTo(Duration.zero);
+        await Future<void>.delayed(const Duration(milliseconds: 80));
+        if (!mounted || _controller != controller) return;
+        _hasStartedCurrentVideo = true;
+      }
+      await controller.play();
+    }
     _scheduleControlsHide();
   }
 
@@ -215,6 +227,7 @@ class _DownloadPlayerScreenState extends ConsumerState<DownloadPlayerScreen> {
         ? duration
         : target;
     await controller.seekTo(bounded);
+    _hasStartedCurrentVideo = true;
     _scheduleControlsHide();
   }
 
@@ -223,6 +236,7 @@ class _DownloadPlayerScreenState extends ConsumerState<DownloadPlayerScreen> {
     if (controller == null) return;
     final duration = controller.value.duration;
     await controller.seekTo(duration * fraction.clamp(0, 1));
+    _hasStartedCurrentVideo = true;
     _scheduleControlsHide();
   }
 

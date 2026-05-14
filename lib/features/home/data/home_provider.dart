@@ -7,11 +7,17 @@ final animeRepositoryProvider = Provider<AnimeRepository>(
   (ref) => AnimeRepository(),
 );
 
+final hentailaHubProvider = FutureProvider<HentailaHubData>((ref) async {
+  final repo = ref.read(animeRepositoryProvider);
+  return repo.hentailaHub();
+});
+
 final popularAnimeProvider = FutureProvider<List<AnimeModel>>((ref) async {
   final repo = ref.read(animeRepositoryProvider);
   final activeProvider = ref.watch(providerPrefProvider);
   if (activeProvider == 'hentaila.com') {
-    return repo.catalog(domain: activeProvider, letter: 'a', limit: 20);
+    final hub = await ref.watch(hentailaHubProvider.future);
+    return hub.latestMedia;
   }
   return repo.searchImageFirst('a', limit: 12);
 });
@@ -20,7 +26,8 @@ final latestAnimeProvider = FutureProvider<List<AnimeModel>>((ref) async {
   final repo = ref.read(animeRepositoryProvider);
   final activeProvider = ref.watch(providerPrefProvider);
   if (activeProvider == 'hentaila.com') {
-    return repo.search('ingoku', domain: activeProvider);
+    final hub = await ref.watch(hentailaHubProvider.future);
+    return hub.latestEpisodes;
   }
   return repo.searchImageFirst('one', limit: 12);
 });

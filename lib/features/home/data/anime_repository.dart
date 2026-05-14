@@ -61,6 +61,41 @@ class AnimeRepository {
         .toList();
   }
 
+  Future<HentailaHubData> hentailaHub() async {
+    final response = await _dio.get(
+      '/anime/hub',
+      queryParameters: {'domain': 'hentaila.com'},
+    );
+    final data = _responseData(response);
+
+    List<AnimeModel> animeList(String key) {
+      final raw = data[key];
+      final List items = raw is List ? raw : const [];
+      return items
+          .map((e) => AnimeModel.fromJson(e as Map<String, dynamic>))
+          .toList();
+    }
+
+    final rawGenres = data['genres'];
+    final List genreItems = rawGenres is List ? rawGenres : const [];
+    final genres = genreItems
+        .map((genre) {
+          if (genre is Map<String, dynamic>) {
+            return genre['name']?.toString();
+          }
+          return genre?.toString();
+        })
+        .whereType<String>()
+        .toList();
+
+    return HentailaHubData(
+      featured: animeList('featured'),
+      latestMedia: animeList('latestMedia'),
+      latestEpisodes: animeList('latestEpisodes'),
+      genres: genres,
+    );
+  }
+
   Future<List<ScheduleAnimeModel>> schedule({required int day}) async {
     final response = await _dio.get(
       '/anime/schedule',
@@ -255,4 +290,18 @@ class AnimeRepository {
     final response = await _dio.get('/anime/batch/$batchId');
     return BatchDownloadModel.fromJson(_responseData(response));
   }
+}
+
+class HentailaHubData {
+  final List<AnimeModel> featured;
+  final List<AnimeModel> latestMedia;
+  final List<AnimeModel> latestEpisodes;
+  final List<String> genres;
+
+  const HentailaHubData({
+    required this.featured,
+    required this.latestMedia,
+    required this.latestEpisodes,
+    required this.genres,
+  });
 }

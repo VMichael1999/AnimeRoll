@@ -23,12 +23,58 @@ class HomeScreen extends ConsumerWidget {
     final isHentaila = ref.watch(providerPrefProvider) == 'hentaila.com';
     final mainList = selectedGenre == 'Todo' ? popular : genreAnime;
 
+    if (isHentaila) {
+      return Scaffold(
+        body: SafeArea(
+          child: CustomScrollView(
+            slivers: [
+              const SliverToBoxAdapter(child: SizedBox(height: 18)),
+              const SliverToBoxAdapter(child: _HentailaHeader()),
+              const SliverToBoxAdapter(child: SizedBox(height: 14)),
+              const SliverToBoxAdapter(child: _SearchBar()),
+              const SliverToBoxAdapter(child: SizedBox(height: 12)),
+              const SliverToBoxAdapter(child: _GenreFilter()),
+              const SliverToBoxAdapter(child: SizedBox(height: 18)),
+              SliverToBoxAdapter(
+                child: mainList.when(
+                  data: (list) => _HentailaGridSection(
+                    title: 'Hentai',
+                    subtitle: selectedGenre == 'Todo'
+                        ? 'RECIENTEMENTE AGREGADOS'
+                        : selectedGenre.toUpperCase(),
+                    action: 'Catalogo de Hentai',
+                    list: list,
+                  ),
+                  loading: () => const _HentailaGridSkeleton(),
+                  error: (err, _) => const SizedBox.shrink(),
+                ),
+              ),
+              if (selectedGenre == 'Todo') ...[
+                const SliverToBoxAdapter(child: SizedBox(height: 24)),
+                SliverToBoxAdapter(
+                  child: latest.when(
+                    data: (list) => _HentailaGridSection(
+                      title: 'Episodios',
+                      subtitle: 'RECIENTEMENTE ACTUALIZADO',
+                      list: list,
+                      episodeCards: true,
+                    ),
+                    loading: () => const _HentailaGridSkeleton(landscape: true),
+                    error: (err, _) => const SizedBox.shrink(),
+                  ),
+                ),
+              ],
+              const SliverToBoxAdapter(child: SizedBox(height: 24)),
+            ],
+          ),
+        ),
+      );
+    }
+
     return Scaffold(
       body: CustomScrollView(
         slivers: [
           _HeroSliver(anime: mainList.valueOrNull?.firstOrNull),
-          if (isHentaila)
-            const SliverToBoxAdapter(child: _ProviderModeHeader()),
           const SliverToBoxAdapter(child: SizedBox(height: 12)),
           SliverToBoxAdapter(child: _SearchBar()),
           const SliverToBoxAdapter(child: SizedBox(height: 12)),
@@ -221,39 +267,74 @@ class _HeroButton extends StatelessWidget {
 
 // ── Search bar ────────────────────────────────────────────────────────────────
 
-class _ProviderModeHeader extends StatelessWidget {
-  const _ProviderModeHeader();
+class _HentailaHeader extends StatelessWidget {
+  const _HentailaHeader();
 
   @override
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        decoration: BoxDecoration(
-          color: AppColors.accent.withValues(alpha: 0.14),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: AppColors.accent.withValues(alpha: 0.45)),
-        ),
-        child: const Row(
-          children: [
-            Icon(Icons.lock_person_rounded, size: 17, color: AppColors.accent2),
-            SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                'Proveedor HentaiLA',
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800),
+      child: Row(
+        children: [
+          const Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Hentai',
+                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900),
+                ),
+                SizedBox(height: 2),
+                Text(
+                  'RECIENTEMENTE AGREGADOS',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Color(0xFFF1C7EB),
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          GestureDetector(
+            onTap: () => context.go('/search'),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: AppColors.surface2,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppColors.border),
+              ),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.layers_outlined,
+                    size: 18,
+                    color: AppColors.textSecondary,
+                  ),
+                  SizedBox(width: 8),
+                  Text(
+                    'Catalogo de Hentai',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: AppColors.textSecondary,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 }
 
 class _SearchBar extends ConsumerWidget {
+  const _SearchBar();
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final isHentaila = ref.watch(providerPrefProvider) == 'hentaila.com';
@@ -307,18 +388,43 @@ class _GenreFilter extends ConsumerWidget {
     'Shounen',
   ];
 
+  static const _hentailaGenres = [
+    'Todo',
+    '3D',
+    'Ahegao',
+    'Anal',
+    'Casadas',
+    'Chikan',
+    'Ecchi',
+    'Enfermeras',
+    'Escolares',
+    'Futanari',
+    'Gore',
+    'Hardcore',
+    'Harem',
+    'Incesto',
+    'Juegos Sexuales',
+    'Suspenso',
+    'Milfs',
+    'Maids',
+    'Netorare',
+    'Ninfomania',
+  ];
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final selected = ref.watch(selectedHomeGenreProvider);
+    final isHentaila = ref.watch(providerPrefProvider) == 'hentaila.com';
+    final genres = isHentaila ? _hentailaGenres : _genres;
     return SizedBox(
       height: 32,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 16),
-        itemCount: _genres.length,
+        itemCount: genres.length,
         separatorBuilder: (context, _) => const SizedBox(width: 8),
         itemBuilder: (context, i) {
-          final genre = _genres[i];
+          final genre = genres[i];
           final active = genre == selected;
           return GestureDetector(
             onTap: () =>
@@ -443,6 +549,227 @@ class _AnimeRow extends StatelessWidget {
 }
 
 // ── Loading skeleton ──────────────────────────────────────────────────────────
+
+class _HentailaGridSection extends StatelessWidget {
+  final String title;
+  final String subtitle;
+  final String? action;
+  final List<AnimeModel> list;
+  final bool episodeCards;
+
+  const _HentailaGridSection({
+    required this.title,
+    required this.subtitle,
+    required this.list,
+    this.action,
+    this.episodeCards = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (list.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: Color(0xFFF1C7EB),
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (action != null)
+                TextButton.icon(
+                  onPressed: () => context.go('/search'),
+                  icon: const Icon(Icons.layers_outlined, size: 16),
+                  label: Text(action!),
+                ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: list.length,
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 2,
+              mainAxisSpacing: 16,
+              crossAxisSpacing: 14,
+              childAspectRatio: episodeCards ? 1.45 : 0.58,
+            ),
+            itemBuilder: (context, index) {
+              final anime = list[index];
+              return _HentailaCard(
+                anime: anime,
+                landscape: episodeCards,
+                onTap: () {
+                  if (episodeCards) {
+                    context.push(
+                      '/player?url=${Uri.encodeComponent(anime.url)}&title=${Uri.encodeComponent(anime.type ?? anime.title)}&animeUrl=${Uri.encodeComponent(_animeUrlFromEpisodeUrl(anime.url))}',
+                    );
+                    return;
+                  }
+                  context.push('/detail?url=${Uri.encodeComponent(anime.url)}');
+                },
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  static String _animeUrlFromEpisodeUrl(String episodeUrl) {
+    final uri = Uri.tryParse(episodeUrl);
+    if (uri == null || uri.pathSegments.isEmpty) return episodeUrl;
+    final episodeSlug = uri.pathSegments.last;
+    final animeSlug = episodeSlug.replaceFirst(RegExp(r'-\d+$'), '');
+    return Uri(
+      scheme: uri.scheme,
+      host: uri.host,
+      pathSegments: ['media', animeSlug],
+    ).toString();
+  }
+}
+
+class _HentailaCard extends StatelessWidget {
+  final AnimeModel anime;
+  final bool landscape;
+  final VoidCallback onTap;
+
+  const _HentailaCard({
+    required this.anime,
+    required this.landscape,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  if (anime.cover != null)
+                    CachedNetworkImage(
+                      imageUrl: anime.cover!,
+                      fit: BoxFit.cover,
+                      placeholder: (context, _) =>
+                          const ColoredBox(color: AppColors.surface2),
+                      errorWidget: (context, url, _) =>
+                          const ColoredBox(color: AppColors.surface2),
+                    )
+                  else
+                    const ColoredBox(color: AppColors.surface2),
+                  if (landscape)
+                    DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            Colors.transparent,
+                            Colors.black.withValues(alpha: 0.72),
+                          ],
+                        ),
+                      ),
+                    ),
+                  Positioned(
+                    left: 0,
+                    bottom: 0,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 5,
+                      ),
+                      decoration: BoxDecoration(
+                        color: AppColors.surface2.withValues(alpha: 0.92),
+                        borderRadius: const BorderRadius.only(
+                          topRight: Radius.circular(6),
+                        ),
+                      ),
+                      child: Text(
+                        anime.type ?? 'OVA',
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800,
+                          color: Color(0xFFF1C7EB),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 7),
+          Text(
+            anime.title,
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800),
+            maxLines: landscape ? 1 : 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HentailaGridSkeleton extends StatelessWidget {
+  final bool landscape;
+
+  const _HentailaGridSkeleton({this.landscape = false});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: GridView.builder(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        itemCount: 6,
+        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 2,
+          mainAxisSpacing: 16,
+          crossAxisSpacing: 14,
+          childAspectRatio: landscape ? 1.45 : 0.58,
+        ),
+        itemBuilder: (context, _) => DecoratedBox(
+          decoration: BoxDecoration(
+            color: AppColors.surface2,
+            borderRadius: BorderRadius.circular(8),
+          ),
+        ),
+      ),
+    );
+  }
+}
 
 class _HorizontalSkeleton extends StatelessWidget {
   const _HorizontalSkeleton();

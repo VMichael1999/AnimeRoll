@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../shared/models/anime_model.dart';
 import '../../../shared/models/episode_model.dart';
+import '../../../shared/widgets/app_toast.dart';
 import '../../../shared/widgets/error_view.dart';
 import '../data/detail_provider.dart';
 import '../../downloads/data/downloads_provider.dart';
@@ -276,15 +277,19 @@ class _DetailInfo extends ConsumerWidget {
                 : 'yourupload',
           );
       if (context.mounted) {
-        ScaffoldMessenger.of(
+        AppToast.show(
           context,
-        ).showSnackBar(const SnackBar(content: Text('Descarga agregada')));
+          message: 'Descarga agregada',
+          type: AppToastType.success,
+        );
       }
     } catch (error) {
       if (context.mounted) {
-        ScaffoldMessenger.of(
+        AppToast.show(
           context,
-        ).showSnackBar(SnackBar(content: Text('No se pudo iniciar: $error')));
+          message: 'No se pudo iniciar la descarga',
+          type: AppToastType.error,
+        );
       }
     }
   }
@@ -299,8 +304,10 @@ class _DetailInfo extends ConsumerWidget {
         .whereType<int>()
         .toList();
     if (episodeNumbers.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No hay números de episodio válidos')),
+      AppToast.show(
+        context,
+        message: 'No hay episodios validos',
+        type: AppToastType.error,
       );
       return;
     }
@@ -317,14 +324,18 @@ class _DetailInfo extends ConsumerWidget {
             variant: ref.read(variantPrefProvider),
           );
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Lote agregado: ${batch.total} episodios')),
+        AppToast.show(
+          context,
+          message: 'Lote agregado: ${batch.total} episodios',
+          type: AppToastType.success,
         );
       }
     } catch (error) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('No se pudo iniciar lote: $error')),
+        AppToast.show(
+          context,
+          message: 'No se pudo iniciar el lote',
+          type: AppToastType.error,
         );
       }
     }
@@ -538,14 +549,18 @@ class _EpisodeList extends ConsumerWidget {
                 : 'yourupload',
           );
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Descarga agregada: ${episode.title}')),
+        AppToast.show(
+          context,
+          message: 'Descarga agregada: ${episode.title}',
+          type: AppToastType.success,
         );
       }
     } catch (error) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('No se pudo iniciar descarga: $error')),
+        AppToast.show(
+          context,
+          message: 'No se pudo iniciar la descarga',
+          type: AppToastType.error,
         );
       }
     }

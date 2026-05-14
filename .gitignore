@@ -45,3 +45,6 @@ app.*.map.json
 /android/app/release
 AGENTS.md
 CLAUDE.md
+
+# FVM Version Cache
+.fvm/

@@ -6,6 +6,7 @@ import '../../features/player/presentation/player_screen.dart';
 import '../../features/schedule/presentation/schedule_screen.dart';
 import '../../features/favorites/presentation/favorites_screen.dart';
 import '../../features/downloads/presentation/downloads_screen.dart';
+import '../../features/downloads/presentation/download_player_screen.dart';
 import '../../features/settings/presentation/settings_screen.dart';
 import '../shell/main_shell.dart';
 
@@ -52,6 +53,21 @@ final appRouter = GoRouter(
           episodeUrl: episodeUrl,
           title: title,
           animeUrl: animeUrl,
+        );
+      },
+    ),
+    GoRoute(
+      path: '/download-player',
+      builder: (context, state) {
+        final id = state.uri.queryParameters['id'];
+        final title = state.uri.queryParameters['title'] ?? '';
+        final localPath = state.uri.queryParameters['path'] ?? '';
+        final animeTitle = state.uri.queryParameters['animeTitle'];
+        return DownloadPlayerScreen(
+          downloadId: id,
+          title: title,
+          localPath: localPath,
+          animeTitle: animeTitle,
         );
       },
     ),

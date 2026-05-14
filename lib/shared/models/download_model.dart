@@ -5,6 +5,10 @@ class DownloadModel {
   final String url;
   final String? title;
   final String? thumbnail;
+  final String? animeTitle;
+  final String? animeUrl;
+  final String? episodeTitle;
+  final int? episodeNumber;
   final String quality;
   final String variant;
   final String? downloadUrl;
@@ -23,6 +27,10 @@ class DownloadModel {
     required this.url,
     this.title,
     this.thumbnail,
+    this.animeTitle,
+    this.animeUrl,
+    this.episodeTitle,
+    this.episodeNumber,
     required this.quality,
     required this.variant,
     this.downloadUrl,
@@ -42,6 +50,24 @@ class DownloadModel {
 
   bool get isSavedOnDevice => localStatus == 'saved' && localPath != null;
 
+  String get albumTitle {
+    final inferred = animeTitle ?? title?.split('·').first.trim();
+    return inferred == null || inferred.isEmpty ? 'Sin título' : inferred;
+  }
+
+  String get albumKey {
+    final key = animeUrl?.trim();
+    if (key != null && key.isNotEmpty) return key;
+    return albumTitle.toLowerCase();
+  }
+
+  String get displayEpisodeTitle {
+    final inferred = episodeTitle ?? title?.split('·').last.trim();
+    if (inferred != null && inferred.isNotEmpty) return inferred;
+    if (episodeNumber != null) return 'Episodio $episodeNumber';
+    return title ?? url;
+  }
+
   factory DownloadModel.fromJson(Map<String, dynamic> json) => DownloadModel(
     id: json['downloadId'] as String? ?? json['id'] as String? ?? '',
     status: json['status'] as String? ?? 'queued',
@@ -49,6 +75,10 @@ class DownloadModel {
     url: json['url'] as String? ?? '',
     title: json['title'] as String?,
     thumbnail: json['thumbnail'] as String?,
+    animeTitle: json['animeTitle'] as String?,
+    animeUrl: json['animeUrl'] as String?,
+    episodeTitle: json['episodeTitle'] as String?,
+    episodeNumber: (json['episodeNumber'] as num?)?.toInt(),
     quality: json['quality'] as String? ?? '1080p',
     variant: json['variant'] as String? ?? 'SUB',
     downloadUrl: json['downloadUrl'] as String?,
@@ -68,6 +98,10 @@ class DownloadModel {
     'url': url,
     'title': title,
     'thumbnail': thumbnail,
+    'animeTitle': animeTitle,
+    'animeUrl': animeUrl,
+    'episodeTitle': episodeTitle,
+    'episodeNumber': episodeNumber,
     'quality': quality,
     'variant': variant,
     'downloadUrl': downloadUrl,
@@ -87,6 +121,10 @@ class DownloadModel {
     String? url,
     String? title,
     String? thumbnail,
+    String? animeTitle,
+    String? animeUrl,
+    String? episodeTitle,
+    int? episodeNumber,
     String? quality,
     String? variant,
     String? downloadUrl,
@@ -105,6 +143,10 @@ class DownloadModel {
       url: url ?? this.url,
       title: title ?? this.title,
       thumbnail: thumbnail ?? this.thumbnail,
+      animeTitle: animeTitle ?? this.animeTitle,
+      animeUrl: animeUrl ?? this.animeUrl,
+      episodeTitle: episodeTitle ?? this.episodeTitle,
+      episodeNumber: episodeNumber ?? this.episodeNumber,
       quality: quality ?? this.quality,
       variant: variant ?? this.variant,
       downloadUrl: downloadUrl ?? this.downloadUrl,

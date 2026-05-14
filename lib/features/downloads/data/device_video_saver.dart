@@ -46,6 +46,18 @@ class DeviceVideoSaver {
     return localPath;
   }
 
+  Future<void> deleteVideo(String? localPath) async {
+    if (localPath == null || localPath.isEmpty) return;
+    if (Platform.isAndroid && localPath.startsWith('content://')) {
+      await _channel.invokeMethod<void>('deleteVideo', {'uri': localPath});
+      return;
+    }
+    final file = File(localPath);
+    if (await file.exists()) {
+      await file.delete();
+    }
+  }
+
   String _fileNameFor(String title) {
     final safe = title
         .replaceAll(RegExp(r'[\\/:*?"<>|]+'), ' ')

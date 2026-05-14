@@ -4,6 +4,7 @@ import android.content.ContentValues
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
+import android.net.Uri
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.plugin.common.MethodChannel
@@ -29,6 +30,18 @@ class MainActivity : FlutterActivity() {
                         result.success(saveVideo(sourcePath, displayName, mimeType))
                     } catch (error: Exception) {
                         result.error("save_failed", error.message, null)
+                    }
+                }
+                "deleteVideo" -> {
+                    val uri = call.argument<String>("uri")
+                    if (uri.isNullOrBlank()) {
+                        result.success(false)
+                        return@setMethodCallHandler
+                    }
+                    try {
+                        result.success(deleteVideo(uri))
+                    } catch (error: Exception) {
+                        result.error("delete_failed", error.message, null)
                     }
                 }
                 else -> result.notImplemented()
@@ -70,5 +83,10 @@ class MainActivity : FlutterActivity() {
         }
 
         return item.toString()
+    }
+
+    private fun deleteVideo(uri: String): Boolean {
+        val deleted = applicationContext.contentResolver.delete(Uri.parse(uri), null, null)
+        return deleted > 0
     }
 }

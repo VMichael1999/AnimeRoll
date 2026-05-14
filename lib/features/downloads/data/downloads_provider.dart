@@ -31,6 +31,10 @@ class DownloadsNotifier extends StateNotifier<List<DownloadModel>> {
     required String episodeUrl,
     String? title,
     String? thumbnail,
+    String? animeTitle,
+    String? animeUrl,
+    String? episodeTitle,
+    int? episodeNumber,
     required String quality,
     required String variant,
     String? preferredServer,
@@ -49,6 +53,10 @@ class DownloadsNotifier extends StateNotifier<List<DownloadModel>> {
       url: download.url,
       title: title,
       thumbnail: thumbnail,
+      animeTitle: animeTitle ?? _inferAnimeTitle(title),
+      animeUrl: animeUrl ?? _inferAnimeUrl(episodeUrl),
+      episodeTitle: episodeTitle ?? _inferEpisodeTitle(title),
+      episodeNumber: episodeNumber ?? _inferEpisodeNumber(episodeUrl),
       quality: download.quality,
       variant: download.variant,
       downloadUrl: download.downloadUrl,
@@ -88,6 +96,10 @@ class DownloadsNotifier extends StateNotifier<List<DownloadModel>> {
                 ? 'Episodio ${item.episode}'
                 : '$title · Ep ${item.episode}',
             thumbnail: thumbnail,
+            animeTitle: title,
+            animeUrl: animeUrl,
+            episodeTitle: 'Episodio ${item.episode}',
+            episodeNumber: item.episode,
             quality: quality,
             variant: variant,
           ),
@@ -155,6 +167,27 @@ class DownloadsNotifier extends StateNotifier<List<DownloadModel>> {
     if (!state.any((item) => item.isRunning || item.isLocalRunning)) {
       _timer?.cancel();
       _timer = null;
+    }
+  }
+
+  Future<void> removeDownload(String id, {bool deleteFile = true}) async {
+    final target = state.where((item) => item.id == id).firstOrNull;
+    state = state.where((item) => item.id != id).toList();
+    await _persist();
+    if (deleteFile && target?.localPath != null) {
+      await _videoSaver.deleteVideo(target!.localPath);
+    }
+  }
+
+  Future<void> removeAlbum(String albumKey, {bool deleteFiles = true}) async {
+    final targets = state
+        .where((item) => item.albumKey == albumKey)
+        .toList(growable: false);
+    state = state.where((item) => item.albumKey != albumKey).toList();
+    await _persist();
+    if (!deleteFiles) return;
+    for (final item in targets) {
+      await _videoSaver.deleteVideo(item.localPath);
     }
   }
 
@@ -240,6 +273,32 @@ class DownloadsNotifier extends StateNotifier<List<DownloadModel>> {
       _storageKey,
       jsonEncode(state.map((item) => item.toJson()).toList()),
     );
+  }
+
+  String? _inferAnimeTitle(String? title) {
+    if (title == null) return null;
+    return title.split('·').first.trim();
+  }
+
+  String? _inferEpisodeTitle(String? title) {
+    if (title == null || !title.contains('·')) return title;
+    return title.split('·').skip(1).join('·').trim();
+  }
+
+  String _inferAnimeUrl(String episodeUrl) {
+    final uri = Uri.tryParse(episodeUrl);
+    if (uri == null || uri.pathSegments.length < 3) return '';
+    return uri
+        .replace(
+          pathSegments: uri.pathSegments.take(uri.pathSegments.length - 1),
+        )
+        .toString();
+  }
+
+  int? _inferEpisodeNumber(String episodeUrl) {
+    final uri = Uri.tryParse(episodeUrl);
+    if (uri == null || uri.pathSegments.isEmpty) return null;
+    return int.tryParse(uri.pathSegments.last);
   }
 
   @override

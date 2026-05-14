@@ -9,6 +9,7 @@ class AnimeRepository {
   final Dio _dio = DioClient.create();
 
   static const List<String> imageFirstDomains = [
+    'animeav1.com',
     'monoschinos2.com',
     'tioanime.com',
     'jkanime.net',
@@ -103,9 +104,6 @@ class AnimeRepository {
     }
 
     if (results.isNotEmpty) return results;
-    if (fallbackResults.isNotEmpty) {
-      return fallbackResults.take(limit).toList();
-    }
 
     try {
       final fallbackItems = await search(query);
@@ -118,6 +116,11 @@ class AnimeRepository {
       }
     } catch (_) {
       // Keep the image-first behavior best-effort; callers already handle empty lists.
+    }
+
+    if (results.isNotEmpty) return results;
+    if (fallbackResults.isNotEmpty) {
+      return fallbackResults.take(limit).toList();
     }
 
     return results;

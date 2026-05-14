@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../shared/models/anime_model.dart';
 import '../../../shared/widgets/error_view.dart';
+import '../../settings/data/settings_provider.dart';
 import '../data/search_provider.dart';
 
 class SearchScreen extends ConsumerStatefulWidget {
@@ -25,6 +26,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   @override
   Widget build(BuildContext context) {
     final mode = ref.watch(searchModeProvider);
+    final activeProvider = ref.watch(providerPrefProvider);
+    final isHentaila = activeProvider == 'hentaila.com';
+    final effectiveMode = isHentaila ? SearchMode.search : mode;
 
     return Scaffold(
       body: SafeArea(
@@ -38,42 +42,47 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                 children: [
                   Row(
                     children: [
-                      const Expanded(
+                      Expanded(
                         child: Text(
-                          'Buscar',
-                          style: TextStyle(
+                          isHentaila ? 'HentaiLA' : 'Buscar',
+                          style: const TextStyle(
                             fontSize: 20,
                             fontWeight: FontWeight.w800,
                           ),
                         ),
                       ),
-                      _ModeButton(
-                        label: 'Buscar',
-                        active: mode == SearchMode.search,
-                        onTap: () =>
-                            ref.read(searchModeProvider.notifier).state =
-                                SearchMode.search,
-                      ),
-                      const SizedBox(width: 8),
-                      _ModeButton(
-                        label: 'Catálogo',
-                        active: mode == SearchMode.catalog,
-                        onTap: () =>
-                            ref.read(searchModeProvider.notifier).state =
-                                SearchMode.catalog,
-                      ),
+                      if (!isHentaila)
+                        _ModeButton(
+                          label: 'Buscar',
+                          active: mode == SearchMode.search,
+                          onTap: () =>
+                              ref.read(searchModeProvider.notifier).state =
+                                  SearchMode.search,
+                        ),
+                      if (!isHentaila) const SizedBox(width: 8),
+                      if (!isHentaila)
+                        _ModeButton(
+                          label: 'Catálogo',
+                          active: mode == SearchMode.catalog,
+                          onTap: () =>
+                              ref.read(searchModeProvider.notifier).state =
+                                  SearchMode.catalog,
+                        ),
                     ],
                   ),
                   const SizedBox(height: 12),
-                  if (mode == SearchMode.search)
-                    _SearchHeader(controller: _controller)
+                  if (effectiveMode == SearchMode.search)
+                    _SearchHeader(
+                      controller: _controller,
+                      isHentaila: isHentaila,
+                    )
                   else
                     const _CatalogHeader(),
                 ],
               ),
             ),
             Expanded(
-              child: mode == SearchMode.search
+              child: effectiveMode == SearchMode.search
                   ? _SearchResults(controller: _controller)
                   : const _CatalogResults(),
             ),
@@ -86,8 +95,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
 
 class _SearchHeader extends ConsumerWidget {
   final TextEditingController controller;
+  final bool isHentaila;
 
-  const _SearchHeader({required this.controller});
+  const _SearchHeader({required this.controller, required this.isHentaila});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -97,12 +107,19 @@ class _SearchHeader extends ConsumerWidget {
         _SearchInput(
           controller: controller,
           onChanged: (v) => ref.read(queryProvider.notifier).state = v,
+          hintText: isHentaila
+              ? 'Buscar en HentaiLA...'
+              : 'Buscar anime, genero...',
         ),
-        const SizedBox(height: 10),
-        _ProviderFilter(
-          selected: selectedDomain,
-          onSelect: (d) => ref.read(domainProvider.notifier).state = d,
-        ),
+        if (isHentaila)
+          const _ProviderModeBadge()
+        else ...[
+          const SizedBox(height: 10),
+          _ProviderFilter(
+            selected: selectedDomain,
+            onSelect: (d) => ref.read(domainProvider.notifier).state = d,
+          ),
+        ],
       ],
     );
   }
@@ -309,8 +326,13 @@ class _ModeButton extends StatelessWidget {
 class _SearchInput extends StatefulWidget {
   final TextEditingController controller;
   final ValueChanged<String> onChanged;
+  final String hintText;
 
-  const _SearchInput({required this.controller, required this.onChanged});
+  const _SearchInput({
+    required this.controller,
+    required this.onChanged,
+    required this.hintText,
+  });
 
   @override
   State<_SearchInput> createState() => _SearchInputState();
@@ -360,10 +382,10 @@ class _SearchInputState extends State<_SearchInput> {
                 fontSize: 13,
                 color: AppColors.textPrimary,
               ),
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 border: InputBorder.none,
-                hintText: 'Buscar anime, género...',
-                hintStyle: TextStyle(color: AppColors.textSecondary),
+                hintText: widget.hintText,
+                hintStyle: const TextStyle(color: AppColors.textSecondary),
                 isDense: true,
               ),
             ),
@@ -380,6 +402,40 @@ class _SearchInputState extends State<_SearchInput> {
                 color: AppColors.textSecondary,
               ),
             ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProviderModeBadge extends StatelessWidget {
+  const _ProviderModeBadge();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(top: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+      decoration: BoxDecoration(
+        color: AppColors.accent.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppColors.accent.withValues(alpha: 0.45)),
+      ),
+      child: const Row(
+        children: [
+          Icon(Icons.lock_person_rounded, size: 16, color: AppColors.accent2),
+          SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'Modo HentaiLA activo',
+              style: TextStyle(
+                fontSize: 12,
+                color: AppColors.textPrimary,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
         ],
       ),
     );

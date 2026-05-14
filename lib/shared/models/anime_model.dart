@@ -38,7 +38,7 @@ class AnimeModel {
           json['poster'] as String?,
       synopsis: json['synopsis'] as String? ?? json['description'] as String?,
       status: _statusLabel(json['status']),
-      type: json['type'] as String?,
+      type: _typeLabel(json['type']),
       year: json['year']?.toString() ?? _yearFromDate(json['startDate']),
       genres: genres is List
           ? genres
@@ -87,5 +87,11 @@ class AnimeModel {
       3 => 'Próximamente',
       _ => null,
     };
+  }
+
+  static String? _typeLabel(Object? value) {
+    if (value == null) return null;
+    if (value is String) return value;
+    return value.toString();
   }
 }

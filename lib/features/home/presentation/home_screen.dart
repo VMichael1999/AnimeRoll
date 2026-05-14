@@ -8,6 +8,7 @@ import '../../../shared/widgets/anime_card.dart';
 import '../../../shared/widgets/section_header.dart';
 import '../../../shared/widgets/wide_card.dart';
 import '../../downloads/data/downloads_provider.dart';
+import '../../settings/data/settings_provider.dart';
 import '../data/home_provider.dart';
 
 class HomeScreen extends ConsumerWidget {
@@ -19,12 +20,15 @@ class HomeScreen extends ConsumerWidget {
     final genreAnime = ref.watch(genreAnimeProvider(selectedGenre));
     final popular = ref.watch(popularAnimeProvider);
     final latest = ref.watch(latestAnimeProvider);
+    final isHentaila = ref.watch(providerPrefProvider) == 'hentaila.com';
     final mainList = selectedGenre == 'Todo' ? popular : genreAnime;
 
     return Scaffold(
       body: CustomScrollView(
         slivers: [
           _HeroSliver(anime: mainList.valueOrNull?.firstOrNull),
+          if (isHentaila)
+            const SliverToBoxAdapter(child: _ProviderModeHeader()),
           const SliverToBoxAdapter(child: SizedBox(height: 12)),
           SliverToBoxAdapter(child: _SearchBar()),
           const SliverToBoxAdapter(child: SizedBox(height: 12)),
@@ -207,9 +211,42 @@ class _HeroButton extends StatelessWidget {
 
 // ── Search bar ────────────────────────────────────────────────────────────────
 
-class _SearchBar extends StatelessWidget {
+class _ProviderModeHeader extends StatelessWidget {
+  const _ProviderModeHeader();
+
   @override
   Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: AppColors.accent.withValues(alpha: 0.14),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: AppColors.accent.withValues(alpha: 0.45)),
+        ),
+        child: const Row(
+          children: [
+            Icon(Icons.lock_person_rounded, size: 17, color: AppColors.accent2),
+            SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Proveedor HentaiLA',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SearchBar extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isHentaila = ref.watch(providerPrefProvider) == 'hentaila.com';
     return GestureDetector(
       onTap: () => context.go('/search'),
       child: Padding(
@@ -222,17 +259,20 @@ class _SearchBar extends StatelessWidget {
             borderRadius: BorderRadius.circular(10),
             border: Border.all(color: AppColors.border),
           ),
-          child: const Row(
+          child: Row(
             children: [
-              Icon(
+              const Icon(
                 Icons.search_rounded,
                 size: 18,
                 color: AppColors.textSecondary,
               ),
-              SizedBox(width: 8),
+              const SizedBox(width: 8),
               Text(
-                'Buscar anime...',
-                style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                isHentaila ? 'Buscar en HentaiLA...' : 'Buscar anime...',
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: AppColors.textSecondary,
+                ),
               ),
             ],
           ),

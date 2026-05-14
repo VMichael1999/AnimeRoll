@@ -1,24 +1,27 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../features/settings/data/settings_provider.dart';
 import '../theme/app_theme.dart';
 
-class MainShell extends StatelessWidget {
+class MainShell extends ConsumerWidget {
   final Widget child;
   const MainShell({super.key, required this.child});
 
-  int _currentIndex(BuildContext context) {
+  int _currentIndex(BuildContext context, bool isHentaila) {
     final location = GoRouterState.of(context).uri.path;
-    if (location.startsWith('/schedule')) return 1;
-    if (location.startsWith('/search')) return 2;
-    if (location.startsWith('/favorites')) return 3;
-    if (location.startsWith('/downloads')) return 4;
-    if (location.startsWith('/settings')) return 5;
+    if (!isHentaila && location.startsWith('/schedule')) return 1;
+    if (location.startsWith('/search')) return isHentaila ? 1 : 2;
+    if (location.startsWith('/favorites')) return isHentaila ? 2 : 3;
+    if (location.startsWith('/downloads')) return isHentaila ? 3 : 4;
+    if (location.startsWith('/settings')) return isHentaila ? 4 : 5;
     return 0;
   }
 
   @override
-  Widget build(BuildContext context) {
-    final index = _currentIndex(context);
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isHentaila = ref.watch(providerPrefProvider) == 'hentaila.com';
+    final index = _currentIndex(context, isHentaila);
     return Scaffold(
       body: child,
       bottomNavigationBar: BottomNavigationBar(
@@ -29,6 +32,21 @@ class MainShell extends StatelessWidget {
         type: BottomNavigationBarType.fixed,
         elevation: 0,
         onTap: (i) {
+          if (isHentaila) {
+            switch (i) {
+              case 0:
+                context.go('/home');
+              case 1:
+                context.go('/search');
+              case 2:
+                context.go('/favorites');
+              case 3:
+                context.go('/downloads');
+              case 4:
+                context.go('/settings');
+            }
+            return;
+          }
           switch (i) {
             case 0:
               context.go('/home');
@@ -44,33 +62,52 @@ class MainShell extends StatelessWidget {
               context.go('/settings');
           }
         },
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.grid_view_rounded),
-            label: 'Inicio',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.calendar_month_rounded),
-            label: 'Horario',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.search_rounded),
-            label: 'Buscar',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.favorite_rounded),
-            label: 'Favoritos',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.download_rounded),
-            label: 'Descargas',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.settings_rounded),
-            label: 'Ajustes',
-          ),
-        ],
+        items: isHentaila ? _hentailaItems : _defaultItems,
       ),
     );
   }
+
+  static const _defaultItems = [
+    BottomNavigationBarItem(
+      icon: Icon(Icons.grid_view_rounded),
+      label: 'Inicio',
+    ),
+    BottomNavigationBarItem(
+      icon: Icon(Icons.calendar_month_rounded),
+      label: 'Horario',
+    ),
+    BottomNavigationBarItem(icon: Icon(Icons.search_rounded), label: 'Buscar'),
+    BottomNavigationBarItem(
+      icon: Icon(Icons.favorite_rounded),
+      label: 'Favoritos',
+    ),
+    BottomNavigationBarItem(
+      icon: Icon(Icons.download_rounded),
+      label: 'Descargas',
+    ),
+    BottomNavigationBarItem(
+      icon: Icon(Icons.settings_rounded),
+      label: 'Ajustes',
+    ),
+  ];
+
+  static const _hentailaItems = [
+    BottomNavigationBarItem(
+      icon: Icon(Icons.grid_view_rounded),
+      label: 'Inicio',
+    ),
+    BottomNavigationBarItem(icon: Icon(Icons.search_rounded), label: 'Buscar'),
+    BottomNavigationBarItem(
+      icon: Icon(Icons.favorite_rounded),
+      label: 'Favoritos',
+    ),
+    BottomNavigationBarItem(
+      icon: Icon(Icons.download_rounded),
+      label: 'Descargas',
+    ),
+    BottomNavigationBarItem(
+      icon: Icon(Icons.settings_rounded),
+      label: 'Ajustes',
+    ),
+  ];
 }

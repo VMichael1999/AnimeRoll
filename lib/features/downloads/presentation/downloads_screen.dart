@@ -6,21 +6,63 @@ import '../../../core/theme/app_theme.dart';
 import '../../../shared/models/download_model.dart';
 import '../data/downloads_provider.dart';
 
-class DownloadsScreen extends ConsumerWidget {
+enum _DownloadTab { saved, active, errors }
+
+class DownloadsScreen extends ConsumerStatefulWidget {
   const DownloadsScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<DownloadsScreen> createState() => _DownloadsScreenState();
+}
+
+class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
+  _DownloadTab _tab = _DownloadTab.saved;
+
+  @override
+  Widget build(BuildContext context) {
     final downloads = ref.watch(downloadsProvider);
     final albums = _DownloadAlbum.fromDownloads(downloads);
+    final active = downloads
+        .where((item) => item.isRunning || item.isLocalRunning)
+        .toList();
+    final errors = downloads
+        .where(
+          (item) => item.status == 'failed' || item.localStatus == 'failed',
+        )
+        .toList();
 
     return Scaffold(
       body: SafeArea(
-        child: _AlbumLibrary(
-          albums: albums,
-          downloads: downloads,
-          onRefresh: () => ref.read(downloadsProvider.notifier).refresh(),
-          onOpenAlbum: (album) => _openAlbumPlayer(context, album),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _DownloadsHeader(
+              downloads: downloads,
+              onRefresh: () => ref.read(downloadsProvider.notifier).refresh(),
+            ),
+            _DownloadStats(downloads: downloads),
+            const SizedBox(height: 12),
+            _DownloadTabs(
+              selected: _tab,
+              onChanged: (tab) => setState(() => _tab = tab),
+            ),
+            Expanded(
+              child: switch (_tab) {
+                _DownloadTab.saved => _AlbumLibrary(
+                  albums: albums,
+                  onOpenAlbum: (album) => _openAlbumPlayer(context, album),
+                ),
+                _DownloadTab.active => _DownloadQueue(
+                  downloads: active,
+                  emptyText: 'No hay descargas en curso',
+                ),
+                _DownloadTab.errors => _DownloadQueue(
+                  downloads: errors,
+                  emptyText: 'Sin errores de descarga',
+                ),
+              },
+            ),
+          ],
         ),
       ),
     );
@@ -35,112 +77,356 @@ class DownloadsScreen extends ConsumerWidget {
   }
 }
 
-class _AlbumLibrary extends StatelessWidget {
-  final List<_DownloadAlbum> albums;
+class _DownloadsHeader extends StatelessWidget {
   final List<DownloadModel> downloads;
   final VoidCallback onRefresh;
-  final ValueChanged<_DownloadAlbum> onOpenAlbum;
 
-  const _AlbumLibrary({
-    required this.albums,
-    required this.downloads,
-    required this.onRefresh,
-    required this.onOpenAlbum,
-  });
+  const _DownloadsHeader({required this.downloads, required this.onRefresh});
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-          child: Row(
-            children: [
-              const Expanded(
-                child: Text(
-                  'Descargas',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
+    final active = downloads
+        .where((item) => item.isRunning || item.isLocalRunning)
+        .length;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+      child: Row(
+        children: [
+          const Expanded(
+            child: Text(
+              'Descargas',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
+            ),
+          ),
+          if (active > 0)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: AppColors.accent.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                '$active activas',
+                style: const TextStyle(
+                  color: AppColors.accent2,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
                 ),
               ),
-              IconButton(
-                tooltip: 'Actualizar',
-                onPressed: onRefresh,
-                icon: const Icon(Icons.refresh_rounded),
-              ),
-            ],
+            ),
+          IconButton(
+            tooltip: 'Actualizar',
+            onPressed: onRefresh,
+            icon: const Icon(Icons.refresh_rounded),
           ),
-        ),
-        const Padding(
-          padding: EdgeInsets.fromLTRB(16, 0, 16, 12),
-          child: Text(
-            'Biblioteca local en Videos/AnimeRoll del movil',
-            style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
-          ),
-        ),
-        _StorageBar(downloads: downloads),
-        const SizedBox(height: 16),
-        Expanded(
-          child: albums.isEmpty
-              ? const _EmptyDownloads()
-              : GridView.builder(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 2,
-                    childAspectRatio: 0.66,
-                    crossAxisSpacing: 14,
-                    mainAxisSpacing: 16,
-                  ),
-                  itemCount: albums.length,
-                  itemBuilder: (context, index) => _AlbumCard(
-                    album: albums[index],
-                    onTap: () => onOpenAlbum(albums[index]),
-                  ),
-                ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
 
-class _StorageBar extends StatelessWidget {
+class _DownloadStats extends StatelessWidget {
   final List<DownloadModel> downloads;
 
-  const _StorageBar({required this.downloads});
+  const _DownloadStats({required this.downloads});
 
   @override
   Widget build(BuildContext context) {
+    final active = downloads
+        .where((item) => item.isRunning || item.isLocalRunning)
+        .length;
     final saved = downloads.where((item) => item.isSavedOnDevice).length;
-    final progress = downloads.isEmpty ? 0.0 : saved / downloads.length;
+    final errors = downloads
+        .where(
+          (item) => item.status == 'failed' || item.localStatus == 'failed',
+        )
+        .length;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Row(
+        children: [
+          Expanded(
+            child: _StatCard(
+              value: '$active',
+              label: 'Activas',
+              color: AppColors.accent2,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: _StatCard(
+              value: '$saved',
+              label: 'Guardados',
+              color: AppColors.success,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: _StatCard(
+              value: '$errors',
+              label: 'Errores',
+              color: AppColors.error,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StatCard extends StatelessWidget {
+  final String value;
+  final String label;
+  final Color color;
+
+  const _StatCard({
+    required this.value,
+    required this.label,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        children: [
+          Text(
+            value,
+            style: TextStyle(
+              color: color,
+              fontSize: 18,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          Text(
+            label.toUpperCase(),
+            style: const TextStyle(
+              color: AppColors.textSecondary,
+              fontSize: 9,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DownloadTabs extends StatelessWidget {
+  final _DownloadTab selected;
+  final ValueChanged<_DownloadTab> onChanged;
+
+  const _DownloadTabs({required this.selected, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Row(
+        children: [
+          _TabButton(
+            label: 'Guardados',
+            active: selected == _DownloadTab.saved,
+            onTap: () => onChanged(_DownloadTab.saved),
+          ),
+          _TabButton(
+            label: 'En curso',
+            active: selected == _DownloadTab.active,
+            onTap: () => onChanged(_DownloadTab.active),
+          ),
+          _TabButton(
+            label: 'Errores',
+            active: selected == _DownloadTab.errors,
+            onTap: () => onChanged(_DownloadTab.errors),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TabButton extends StatelessWidget {
+  final String label;
+  final bool active;
+  final VoidCallback onTap;
+
+  const _TabButton({
+    required this.label,
+    required this.active,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          alignment: Alignment.center,
+          padding: const EdgeInsets.symmetric(vertical: 9),
+          decoration: BoxDecoration(
+            border: Border(
+              bottom: BorderSide(
+                color: active ? AppColors.accent2 : Colors.transparent,
+                width: 2,
+              ),
+            ),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              color: active ? AppColors.accent2 : AppColors.textSecondary,
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _AlbumLibrary extends StatelessWidget {
+  final List<_DownloadAlbum> albums;
+  final ValueChanged<_DownloadAlbum> onOpenAlbum;
+
+  const _AlbumLibrary({required this.albums, required this.onOpenAlbum});
+
+  @override
+  Widget build(BuildContext context) {
+    if (albums.isEmpty) return const _EmptyDownloads();
+    return GridView.builder(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        childAspectRatio: 0.66,
+        crossAxisSpacing: 14,
+        mainAxisSpacing: 16,
+      ),
+      itemCount: albums.length,
+      itemBuilder: (context, index) => _AlbumCard(
+        album: albums[index],
+        onTap: () => onOpenAlbum(albums[index]),
+      ),
+    );
+  }
+}
+
+class _DownloadQueue extends StatelessWidget {
+  final List<DownloadModel> downloads;
+  final String emptyText;
+
+  const _DownloadQueue({required this.downloads, required this.emptyText});
+
+  @override
+  Widget build(BuildContext context) {
+    if (downloads.isEmpty) {
+      return Center(
+        child: Text(
+          emptyText,
+          style: const TextStyle(color: AppColors.textSecondary),
+        ),
+      );
+    }
+    return ListView.separated(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+      itemCount: downloads.length,
+      separatorBuilder: (context, _) => const SizedBox(height: 8),
+      itemBuilder: (context, index) =>
+          _DownloadQueueTile(download: downloads[index]),
+    );
+  }
+}
+
+class _DownloadQueueTile extends StatelessWidget {
+  final DownloadModel download;
+
+  const _DownloadQueueTile({required this.download});
+
+  @override
+  Widget build(BuildContext context) {
+    final failed =
+        download.status == 'failed' || download.localStatus == 'failed';
+    final progress = download.localStatus == 'saving'
+        ? download.localProgress
+        : download.progress;
 
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16),
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: AppColors.surface2,
+        color: AppColors.surface,
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: AppColors.border),
       ),
       child: Column(
         children: [
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('Videos guardados', style: TextStyle(fontSize: 11)),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(6),
+                child: SizedBox(
+                  width: 64,
+                  height: 40,
+                  child: _CoverImage(url: download.thumbnail),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      download.displayEpisodeTitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    Text(
+                      failed
+                          ? download.error ?? 'Error desconocido'
+                          : '${download.quality} - ${download.variant}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: failed
+                            ? AppColors.error
+                            : AppColors.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
               Text(
-                '$saved / ${downloads.length}',
-                style: const TextStyle(fontSize: 11, color: AppColors.accent2),
+                failed ? 'Error' : '$progress%',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: failed ? AppColors.error : AppColors.accent2,
+                  fontWeight: FontWeight.w800,
+                ),
               ),
             ],
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 8),
           ClipRRect(
             borderRadius: BorderRadius.circular(3),
             child: LinearProgressIndicator(
-              value: progress,
+              value: progress.clamp(0, 100) / 100,
+              minHeight: 5,
               backgroundColor: AppColors.border,
-              valueColor: const AlwaysStoppedAnimation(AppColors.accent),
-              minHeight: 6,
+              valueColor: AlwaysStoppedAnimation(
+                failed ? AppColors.error : AppColors.accent2,
+              ),
             ),
           ),
         ],

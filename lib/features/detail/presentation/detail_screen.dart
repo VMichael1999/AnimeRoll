@@ -56,6 +56,7 @@ class _DetailBody extends StatelessWidget {
             animeUrl: anime.url,
           ),
         ),
+        SliverToBoxAdapter(child: _RelatedSection(anime: anime)),
         const SliverToBoxAdapter(child: SizedBox(height: 24)),
       ],
     );
@@ -666,6 +667,272 @@ class _ImagePlaceholder extends StatelessWidget {
           size: iconSize,
         ),
       ),
+    );
+  }
+}
+
+class _RelatedSection extends ConsumerWidget {
+  final AnimeModel anime;
+
+  const _RelatedSection({required this.anime});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final relatedAsync = ref.watch(relatedAnimeProvider(anime));
+
+    return relatedAsync.maybeWhen(
+      data: (items) {
+        if (items.isEmpty) return const SizedBox.shrink();
+        final sameUniverse = items
+            .where((item) => _sameFamily(anime.title, item.title))
+            .take(6)
+            .toList();
+        final recommendations = items
+            .where((item) => !sameUniverse.any((same) => same.url == item.url))
+            .take(6)
+            .toList();
+
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(16, 18, 0, 0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (sameUniverse.isNotEmpty) ...[
+                const _RelatedTitle('Del mismo universo'),
+                const SizedBox(height: 10),
+                _RelatedCarousel(items: sameUniverse),
+                const SizedBox(height: 18),
+              ],
+              if (recommendations.isNotEmpty) ...[
+                const _RelatedTitle('Te puede gustar'),
+                const SizedBox(height: 10),
+                Padding(
+                  padding: const EdgeInsets.only(right: 16),
+                  child: Column(
+                    children: recommendations
+                        .map(
+                          (item) => Padding(
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: _RecommendationTile(
+                              anime: item,
+                              reason: anime.genres.isNotEmpty
+                                  ? 'Por tu interes en ${anime.genres.first}'
+                                  : 'Similar a ${anime.title}',
+                            ),
+                          ),
+                        )
+                        .toList(),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        );
+      },
+      orElse: () => const SizedBox.shrink(),
+    );
+  }
+
+  bool _sameFamily(String source, String candidate) {
+    final sourceKey = _mainTitle(source);
+    final candidateKey = _mainTitle(candidate);
+    return sourceKey.length > 3 && candidateKey.contains(sourceKey);
+  }
+
+  String _mainTitle(String value) {
+    return value
+        .toLowerCase()
+        .split(RegExp(r'[:\-()]'))
+        .first
+        .replaceAll(RegExp(r'\b(season|part|final|tv)\b'), '')
+        .trim();
+  }
+}
+
+class _RelatedTitle extends StatelessWidget {
+  final String title;
+
+  const _RelatedTitle(this.title);
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      title,
+      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
+    );
+  }
+}
+
+class _RelatedCarousel extends StatelessWidget {
+  final List<AnimeModel> items;
+
+  const _RelatedCarousel({required this.items});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 178,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.only(right: 16),
+        itemCount: items.length,
+        separatorBuilder: (context, _) => const SizedBox(width: 10),
+        itemBuilder: (context, index) => _RelatedCard(anime: items[index]),
+      ),
+    );
+  }
+}
+
+class _RelatedCard extends StatelessWidget {
+  final AnimeModel anime;
+
+  const _RelatedCard({required this.anime});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () =>
+          context.push('/detail?url=${Uri.encodeComponent(anime.url)}'),
+      child: SizedBox(
+        width: 100,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: _RelatedImage(url: anime.cover),
+              ),
+            ),
+            const SizedBox(height: 5),
+            Text(
+              anime.title,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w800),
+            ),
+            if (anime.score != null)
+              Row(
+                children: [
+                  const Icon(
+                    Icons.star_rounded,
+                    size: 12,
+                    color: AppColors.warning,
+                  ),
+                  const SizedBox(width: 2),
+                  Text(
+                    anime.score!.toStringAsFixed(1),
+                    style: const TextStyle(
+                      fontSize: 10,
+                      color: AppColors.warning,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ],
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _RecommendationTile extends StatelessWidget {
+  final AnimeModel anime;
+  final String reason;
+
+  const _RecommendationTile({required this.anime, required this.reason});
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: () =>
+          context.push('/detail?url=${Uri.encodeComponent(anime.url)}'),
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: Row(
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(6),
+              child: SizedBox(
+                width: 48,
+                height: 64,
+                child: _RelatedImage(url: anime.cover),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    anime.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  if (anime.genres.isNotEmpty) ...[
+                    const SizedBox(height: 5),
+                    Wrap(
+                      spacing: 4,
+                      runSpacing: 4,
+                      children: anime.genres
+                          .take(2)
+                          .map((genre) => _GenreTag(label: genre))
+                          .toList(),
+                    ),
+                  ],
+                  const SizedBox(height: 5),
+                  Text(
+                    reason,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 10,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(
+              Icons.chevron_right_rounded,
+              color: AppColors.textSecondary,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _RelatedImage extends StatelessWidget {
+  final String? url;
+
+  const _RelatedImage({this.url});
+
+  @override
+  Widget build(BuildContext context) {
+    if (url == null || url!.isEmpty) {
+      return const _ImagePlaceholder(iconSize: 20);
+    }
+    return CachedNetworkImage(
+      imageUrl: url!,
+      fit: BoxFit.cover,
+      width: double.infinity,
+      height: double.infinity,
+      placeholder: (context, _) => const _ImagePlaceholder(iconSize: 20),
+      errorWidget: (context, url, error) =>
+          const _ImagePlaceholder(iconSize: 20),
     );
   }
 }

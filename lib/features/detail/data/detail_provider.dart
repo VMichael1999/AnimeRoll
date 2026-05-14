@@ -9,3 +9,13 @@ final animeDetailProvider = FutureProvider.autoDispose
     .family<AnimeDetailData, String>(
       (ref, url) => ref.read(animeRepositoryProvider).getInfoWithEpisodes(url),
     );
+
+final relatedAnimeProvider = FutureProvider.autoDispose
+    .family<List<AnimeModel>, AnimeModel>((ref, anime) async {
+      final repo = ref.read(animeRepositoryProvider);
+      final query = anime.genres.isNotEmpty ? anime.genres.first : anime.title;
+      final results = await repo.searchImageFirst(query, limit: 12);
+      return results
+          .where((item) => item.url.isNotEmpty && item.url != anime.url)
+          .toList();
+    });

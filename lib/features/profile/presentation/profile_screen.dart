@@ -5,6 +5,8 @@ import '../../../core/theme/app_theme.dart';
 import '../../downloads/data/downloads_provider.dart';
 import '../../favorites/data/favorites_provider.dart';
 import '../../history/data/watch_history_provider.dart';
+import '../../marathon/data/marathon_provider.dart';
+import '../../marathon/presentation/marathon_hud.dart';
 
 class ProfileScreen extends ConsumerWidget {
   const ProfileScreen({super.key});
@@ -14,6 +16,7 @@ class ProfileScreen extends ConsumerWidget {
     final downloads = ref.watch(downloadsProvider);
     final favorites = ref.watch(favoritesProvider);
     final history = ref.watch(watchHistoryProvider);
+    final marathon = ref.watch(marathonProvider);
     final saved = downloads.where((item) => item.isSavedOnDevice).toList();
     final watchedMs = history.fold<int>(
       0,
@@ -30,6 +33,19 @@ class ProfileScreen extends ConsumerWidget {
     final streak = _watchStreak(history);
     final recentActivity = _activityByDay(history);
     final genres = _favoriteGenres(favorites);
+    final stats = _ProfileProgressStats(
+      watchedHours: watchedHours,
+      completedEpisodes: completedEpisodes,
+      series: series,
+      streak: streak,
+      favorites: favorites.length,
+      savedEpisodes: saved.length,
+      weeklyEpisodes: _weeklyCompletedEpisodes(history),
+      favoriteGenres: genres.length,
+    );
+    final level = _LevelProgress.fromStats(stats);
+    final achievements = _Achievement.fromStats(stats);
+    final challenges = _WeeklyChallenge.fromStats(stats);
 
     return Scaffold(
       body: SafeArea(
@@ -48,6 +64,11 @@ class ProfileScreen extends ConsumerWidget {
             const SizedBox(height: 4),
             const _ProfileHeader(),
             const SizedBox(height: 22),
+            MarathonHud(
+              session: marathon,
+              onReset: () => ref.read(marathonProvider.notifier).reset(),
+            ),
+            if (marathon.isActive) const SizedBox(height: 18),
             GridView.count(
               crossAxisCount: 2,
               shrinkWrap: true,
@@ -88,6 +109,20 @@ class ProfileScreen extends ConsumerWidget {
               ],
             ),
             const SizedBox(height: 18),
+            _LevelCard(level: level),
+            const SizedBox(height: 18),
+            const _SectionTitle('Logros recientes'),
+            const SizedBox(height: 10),
+            _AchievementGrid(achievements: achievements),
+            const SizedBox(height: 18),
+            const _SectionTitle('Retos semanales'),
+            const SizedBox(height: 10),
+            Column(
+              children: challenges
+                  .map((challenge) => _ChallengeCard(challenge: challenge))
+                  .toList(),
+            ),
+            const SizedBox(height: 20),
             const _SectionTitle('Géneros favoritos'),
             const SizedBox(height: 10),
             if (genres.isEmpty)
@@ -142,6 +177,20 @@ class ProfileScreen extends ConsumerWidget {
     return counts;
   }
 
+  static int _weeklyCompletedEpisodes(List<WatchHistoryEntry> history) {
+    final now = DateTime.now();
+    final weekStart = DateTime(
+      now.year,
+      now.month,
+      now.day,
+    ).subtract(Duration(days: now.weekday - 1));
+    return history.where((item) {
+      if (!item.completed) return false;
+      final updatedAt = DateTime.tryParse(item.updatedAt);
+      return updatedAt != null && !updatedAt.isBefore(weekStart);
+    }).length;
+  }
+
   static int _watchStreak(List<WatchHistoryEntry> history) {
     final activity = _activityByDay(history);
     if (activity.isEmpty) return 0;
@@ -153,6 +202,188 @@ class ProfileScreen extends ConsumerWidget {
       day = day.subtract(const Duration(days: 1));
     }
     return streak;
+  }
+}
+
+class _ProfileProgressStats {
+  final int watchedHours;
+  final int completedEpisodes;
+  final int series;
+  final int streak;
+  final int favorites;
+  final int savedEpisodes;
+  final int weeklyEpisodes;
+  final int favoriteGenres;
+
+  const _ProfileProgressStats({
+    required this.watchedHours,
+    required this.completedEpisodes,
+    required this.series,
+    required this.streak,
+    required this.favorites,
+    required this.savedEpisodes,
+    required this.weeklyEpisodes,
+    required this.favoriteGenres,
+  });
+
+  int get xp =>
+      completedEpisodes * 80 +
+      watchedHours * 18 +
+      streak * 120 +
+      series * 45 +
+      favorites * 20 +
+      savedEpisodes * 30;
+}
+
+class _LevelProgress {
+  final int level;
+  final int currentXp;
+  final int nextLevelXp;
+  final String title;
+
+  const _LevelProgress({
+    required this.level,
+    required this.currentXp,
+    required this.nextLevelXp,
+    required this.title,
+  });
+
+  double get percent => nextLevelXp == 0 ? 0 : currentXp / nextLevelXp;
+  int get remainingXp => (nextLevelXp - currentXp).clamp(0, nextLevelXp);
+
+  factory _LevelProgress.fromStats(_ProfileProgressStats stats) {
+    final level = (stats.xp ~/ 500).clamp(1, 99);
+    final currentXp = stats.xp % 500;
+    final title = switch (level) {
+      >= 20 => 'Leyenda del anime',
+      >= 12 => 'Otaku veterano',
+      >= 6 => 'Explorador activo',
+      _ => 'Nuevo aventurero',
+    };
+    return _LevelProgress(
+      level: level,
+      currentXp: currentXp,
+      nextLevelXp: 500,
+      title: title,
+    );
+  }
+}
+
+class _Achievement {
+  final IconData icon;
+  final String name;
+  final String description;
+  final bool unlocked;
+  final Color color;
+
+  const _Achievement({
+    required this.icon,
+    required this.name,
+    required this.description,
+    required this.unlocked,
+    required this.color,
+  });
+
+  static List<_Achievement> fromStats(_ProfileProgressStats stats) {
+    return [
+      _Achievement(
+        icon: Icons.local_fire_department_rounded,
+        name: 'Maratonista',
+        description: '5 eps en una semana',
+        unlocked: stats.weeklyEpisodes >= 5,
+        color: AppColors.error,
+      ),
+      _Achievement(
+        icon: Icons.calendar_month_rounded,
+        name: 'Racha ${stats.streak}',
+        description: '7 días seguidos',
+        unlocked: stats.streak >= 7,
+        color: AppColors.warning,
+      ),
+      _Achievement(
+        icon: Icons.explore_rounded,
+        name: 'Explorador',
+        description: '5 géneros favoritos',
+        unlocked: stats.favoriteGenres >= 5,
+        color: AppColors.accent2,
+      ),
+      _Achievement(
+        icon: Icons.check_circle_rounded,
+        name: 'Constante',
+        description: '25 eps vistos',
+        unlocked: stats.completedEpisodes >= 25,
+        color: AppColors.success,
+      ),
+      _Achievement(
+        icon: Icons.bookmark_rounded,
+        name: 'Curador',
+        description: '10 favoritos',
+        unlocked: stats.favorites >= 10,
+        color: AppColors.accent,
+      ),
+      _Achievement(
+        icon: Icons.offline_pin_rounded,
+        name: 'Offline',
+        description: '5 eps guardados',
+        unlocked: stats.savedEpisodes >= 5,
+        color: AppColors.success,
+      ),
+    ];
+  }
+}
+
+class _WeeklyChallenge {
+  final IconData icon;
+  final String title;
+  final String description;
+  final int current;
+  final int target;
+  final int xp;
+  final Color color;
+
+  const _WeeklyChallenge({
+    required this.icon,
+    required this.title,
+    required this.description,
+    required this.current,
+    required this.target,
+    required this.xp,
+    required this.color,
+  });
+
+  double get percent => target == 0 ? 0 : (current / target).clamp(0.0, 1.0);
+  bool get completed => current >= target;
+
+  static List<_WeeklyChallenge> fromStats(_ProfileProgressStats stats) {
+    return [
+      _WeeklyChallenge(
+        icon: Icons.local_fire_department_rounded,
+        title: 'Maratón exprés',
+        description: 'Ve 10 episodios esta semana',
+        current: stats.weeklyEpisodes,
+        target: 10,
+        xp: 500,
+        color: AppColors.error,
+      ),
+      _WeeklyChallenge(
+        icon: Icons.category_rounded,
+        title: 'Fuera de zona',
+        description: 'Marca 5 géneros favoritos',
+        current: stats.favoriteGenres,
+        target: 5,
+        xp: 300,
+        color: AppColors.accent2,
+      ),
+      _WeeklyChallenge(
+        icon: Icons.download_done_rounded,
+        title: 'Biblioteca lista',
+        description: 'Guarda 3 episodios offline',
+        current: stats.savedEpisodes,
+        target: 3,
+        xp: 250,
+        color: AppColors.success,
+      ),
+    ];
   }
 }
 
@@ -260,6 +491,299 @@ class _ProfileStat extends StatelessWidget {
                   fontSize: 10,
                   fontWeight: FontWeight.w700,
                   letterSpacing: 0,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _LevelCard extends StatelessWidget {
+  final _LevelProgress level;
+
+  const _LevelCard({required this.level});
+
+  @override
+  Widget build(BuildContext context) {
+    final percent = level.percent.clamp(0.0, 1.0);
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 54,
+                height: 54,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: LinearGradient(
+                    colors: [AppColors.accent, AppColors.accent2],
+                  ),
+                ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      'LVL',
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.75),
+                        fontSize: 9,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    Text(
+                      '${level.level}',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 13),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      level.title,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${level.currentXp} / ${level.nextLevelXp} XP · faltan ${level.remainingXp}',
+                      style: const TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 13),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: percent,
+              minHeight: 7,
+              backgroundColor: AppColors.border,
+              valueColor: AlwaysStoppedAnimation(AppColors.accent2),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AchievementGrid extends StatelessWidget {
+  final List<_Achievement> achievements;
+
+  const _AchievementGrid({required this.achievements});
+
+  @override
+  Widget build(BuildContext context) {
+    return GridView.count(
+      crossAxisCount: 3,
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      crossAxisSpacing: 8,
+      mainAxisSpacing: 8,
+      childAspectRatio: 0.9,
+      children: achievements
+          .map((achievement) => _AchievementTile(achievement: achievement))
+          .toList(),
+    );
+  }
+}
+
+class _AchievementTile extends StatelessWidget {
+  final _Achievement achievement;
+
+  const _AchievementTile({required this.achievement});
+
+  @override
+  Widget build(BuildContext context) {
+    final color = achievement.unlocked
+        ? achievement.color
+        : AppColors.textSecondary;
+    return Container(
+      padding: const EdgeInsets.all(9),
+      decoration: BoxDecoration(
+        color: achievement.unlocked
+            ? AppColors.surface
+            : AppColors.surface.withValues(alpha: 0.55),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: achievement.unlocked
+              ? achievement.color.withValues(alpha: 0.35)
+              : AppColors.border,
+        ),
+      ),
+      child: Opacity(
+        opacity: achievement.unlocked ? 1 : 0.55,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.16),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(achievement.icon, color: color, size: 18),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              achievement.name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w900),
+            ),
+            const SizedBox(height: 3),
+            Text(
+              achievement.description,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: AppColors.textSecondary,
+                fontSize: 9,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ChallengeCard extends StatelessWidget {
+  final _WeeklyChallenge challenge;
+
+  const _ChallengeCard({required this.challenge});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(
+                  color: challenge.color.withValues(alpha: 0.16),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(challenge.icon, color: challenge.color, size: 19),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      challenge.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      challenge.description,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                challenge.completed ? 'Listo' : '+${challenge.xp} XP',
+                style: TextStyle(
+                  color: challenge.completed
+                      ? AppColors.success
+                      : AppColors.accent2,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: LinearProgressIndicator(
+                    value: challenge.percent,
+                    minHeight: 6,
+                    backgroundColor: AppColors.border,
+                    valueColor: AlwaysStoppedAnimation(
+                      challenge.completed
+                          ? AppColors.success
+                          : AppColors.accent2,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Text.rich(
+                TextSpan(
+                  children: [
+                    TextSpan(
+                      text: '${challenge.current.clamp(0, challenge.target)}',
+                      style: TextStyle(
+                        color: challenge.completed
+                            ? AppColors.success
+                            : AppColors.accent2,
+                      ),
+                    ),
+                    TextSpan(text: '/${challenge.target}'),
+                  ],
+                ),
+                style: const TextStyle(
+                  color: AppColors.textSecondary,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w900,
                 ),
               ),
             ],

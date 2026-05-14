@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../shared/models/anime_model.dart';
 import '../../../shared/widgets/error_view.dart';
+import '../../home/data/anime_repository.dart';
 import '../../settings/data/settings_provider.dart';
 import '../data/search_provider.dart';
 
@@ -62,6 +63,15 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                       if (!isHentaila) const SizedBox(width: 8),
                       if (!isHentaila)
                         _ModeButton(
+                          label: 'Mood',
+                          active: mode == SearchMode.mood,
+                          onTap: () =>
+                              ref.read(searchModeProvider.notifier).state =
+                                  SearchMode.mood,
+                        ),
+                      if (!isHentaila) const SizedBox(width: 8),
+                      if (!isHentaila)
+                        _ModeButton(
                           label: 'Catálogo',
                           active: mode == SearchMode.catalog,
                           onTap: () =>
@@ -71,10 +81,12 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                     ],
                   ),
                   const SizedBox(height: 12),
-                  if (effectiveMode == SearchMode.search)
+                  if (effectiveMode == SearchMode.search ||
+                      effectiveMode == SearchMode.mood)
                     _SearchHeader(
                       controller: _controller,
                       isHentaila: isHentaila,
+                      mood: effectiveMode == SearchMode.mood,
                     )
                   else if (isHentaila)
                     _HentailaCatalogHeader(controller: _controller)
@@ -86,6 +98,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
             Expanded(
               child: effectiveMode == SearchMode.search
                   ? _SearchResults(controller: _controller)
+                  : effectiveMode == SearchMode.mood
+                  ? _MoodResults(controller: _controller)
                   : const _CatalogResults(),
             ),
           ],
@@ -119,8 +133,13 @@ class _HentailaCatalogHeader extends ConsumerWidget {
 class _SearchHeader extends ConsumerWidget {
   final TextEditingController controller;
   final bool isHentaila;
+  final bool mood;
 
-  const _SearchHeader({required this.controller, required this.isHentaila});
+  const _SearchHeader({
+    required this.controller,
+    required this.isHentaila,
+    this.mood = false,
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -132,8 +151,11 @@ class _SearchHeader extends ConsumerWidget {
           onChanged: (v) => ref.read(queryProvider.notifier).state = v,
           hintText: isHentaila
               ? 'Buscar en HentaiLA...'
+              : mood
+              ? 'Ej: quiero algo triste, accion intensa...'
               : 'Buscar anime, genero...',
         ),
+        if (mood) const _MoodChips(),
         if (isHentaila)
           const _ProviderModeBadge()
         else ...[
@@ -144,6 +166,47 @@ class _SearchHeader extends ConsumerWidget {
           ),
         ],
       ],
+    );
+  }
+}
+
+class _MoodChips extends ConsumerWidget {
+  const _MoodChips();
+
+  static const moods = [
+    'Quiero llorar',
+    'Mucha accion',
+    'Romance lento',
+    'Reirme',
+    'Suspenso oscuro',
+  ];
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 10),
+      child: SizedBox(
+        height: 32,
+        child: ListView.separated(
+          scrollDirection: Axis.horizontal,
+          itemCount: moods.length,
+          separatorBuilder: (_, _) => const SizedBox(width: 8),
+          itemBuilder: (context, index) {
+            final mood = moods[index];
+            return ActionChip(
+              label: Text(mood),
+              onPressed: () => ref.read(queryProvider.notifier).state = mood,
+              backgroundColor: AppColors.surface2,
+              side: BorderSide(color: AppColors.border),
+              labelStyle: const TextStyle(
+                color: AppColors.textSecondary,
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+              ),
+            );
+          },
+        ),
+      ),
     );
   }
 }
@@ -281,6 +344,44 @@ class _SearchResults extends ConsumerWidget {
       error: (e, _) => ErrorView(
         message: 'No se pudo buscar. Intenta nuevamente.',
         onRetry: () => ref.invalidate(searchResultsProvider),
+      ),
+    );
+  }
+}
+
+class _MoodResults extends ConsumerWidget {
+  final TextEditingController controller;
+
+  const _MoodResults({required this.controller});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final results = ref.watch(moodResultsProvider);
+    final query = ref.watch(queryProvider);
+    if (controller.text != query) {
+      controller.text = query;
+      controller.selection = TextSelection.collapsed(offset: query.length);
+    }
+    return results.when(
+      data: (list) {
+        if (query.trim().isEmpty) {
+          return const _EmptyState(
+            title: 'Busca por mood',
+            subtitle: 'Describe que quieres sentir o ver.',
+          );
+        }
+        if (list.isEmpty) return const _NoResults();
+        return ListView.separated(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+          itemCount: list.length,
+          separatorBuilder: (_, _) => const SizedBox(height: 10),
+          itemBuilder: (context, index) => _MoodResultTile(result: list[index]),
+        );
+      },
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (e, _) => ErrorView(
+        message: 'No se pudo buscar por mood.',
+        onRetry: () => ref.invalidate(moodResultsProvider),
       ),
     );
   }
@@ -646,6 +747,104 @@ class _ResultListTile extends StatelessWidget {
   }
 }
 
+class _MoodResultTile extends StatelessWidget {
+  final MoodAnimeResult result;
+
+  const _MoodResultTile({required this.result});
+
+  @override
+  Widget build(BuildContext context) {
+    final anime = result.anime;
+    return InkWell(
+      borderRadius: BorderRadius.circular(10),
+      onTap: () =>
+          context.push('/detail?url=${Uri.encodeComponent(anime.url)}'),
+      child: Container(
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: Row(
+          children: [
+            SizedBox(
+              width: 64,
+              height: 88,
+              child: _PosterWithBadge(anime: anime),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 7,
+                          vertical: 3,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.accent.withValues(alpha: 0.18),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: AppColors.accent),
+                        ),
+                        child: Text(
+                          '${result.match}%',
+                          style: TextStyle(
+                            color: AppColors.accent2,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 7),
+                      const Text(
+                        'match',
+                        style: TextStyle(
+                          color: AppColors.textSecondary,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 7),
+                  Text(
+                    anime.title,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const SizedBox(height: 5),
+                  Text(
+                    result.reason,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(
+              Icons.chevron_right_rounded,
+              color: AppColors.textSecondary,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _PosterWithBadge extends StatelessWidget {
   final AnimeModel anime;
 
@@ -709,20 +908,40 @@ class _CoverPlaceholder extends StatelessWidget {
 }
 
 class _EmptyState extends StatelessWidget {
-  const _EmptyState();
+  final String title;
+  final String? subtitle;
+
+  const _EmptyState({this.title = 'Escribe para buscar anime', this.subtitle});
 
   @override
   Widget build(BuildContext context) {
-    return const Center(
+    return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.search_rounded, size: 48, color: AppColors.textSecondary),
-          SizedBox(height: 12),
-          Text(
-            'Escribe para buscar anime',
-            style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+          const Icon(
+            Icons.search_rounded,
+            size: 48,
+            color: AppColors.textSecondary,
           ),
+          const SizedBox(height: 12),
+          Text(
+            title,
+            style: const TextStyle(
+              color: AppColors.textSecondary,
+              fontSize: 13,
+            ),
+          ),
+          if (subtitle != null) ...[
+            const SizedBox(height: 5),
+            Text(
+              subtitle!,
+              style: const TextStyle(
+                color: AppColors.textSecondary,
+                fontSize: 11,
+              ),
+            ),
+          ],
         ],
       ),
     );

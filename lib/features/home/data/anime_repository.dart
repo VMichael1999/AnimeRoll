@@ -30,6 +30,43 @@ class AnimeRepository {
         .toList();
   }
 
+  Future<List<MoodAnimeResult>> moodSearch(
+    String query, {
+    String? domain,
+  }) async {
+    final response = await _dio.get(
+      '/anime/mood-search',
+      queryParameters: {'q': query, 'domain': domain, 'limit': 12}
+        ..removeWhere((_, v) => v == null || v == ''),
+    );
+    final data = _responseData(response);
+    final results = data['results'];
+    final List items = results is List ? results : const [];
+    return items
+        .map((e) => MoodAnimeResult.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<AiRecapResult> recapEpisode({
+    required String animeTitle,
+    required String episodeTitle,
+    required double percent,
+    String? synopsis,
+    int? episodeNumber,
+  }) async {
+    final response = await _dio.post(
+      '/anime/recap',
+      data: {
+        'animeTitle': animeTitle,
+        'episodeTitle': episodeTitle,
+        'percent': percent,
+        'synopsis': synopsis,
+        'episodeNumber': episodeNumber,
+      }..removeWhere((_, v) => v == null),
+    );
+    return AiRecapResult.fromJson(_responseData(response));
+  }
+
   Future<List<AnimeModel>> catalog({
     String domain = 'animeav1.com',
     String letter = '#',
@@ -291,6 +328,49 @@ class AnimeRepository {
   Future<BatchDownloadModel> getBatchStatus(String batchId) async {
     final response = await _dio.get('/anime/batch/$batchId');
     return BatchDownloadModel.fromJson(_responseData(response));
+  }
+}
+
+class MoodAnimeResult {
+  final AnimeModel anime;
+  final int match;
+  final String reason;
+
+  const MoodAnimeResult({
+    required this.anime,
+    required this.match,
+    required this.reason,
+  });
+
+  factory MoodAnimeResult.fromJson(Map<String, dynamic> json) {
+    return MoodAnimeResult(
+      anime: AnimeModel.fromJson(json),
+      match: (json['match'] as num?)?.toInt() ?? 80,
+      reason: json['reason'] as String? ?? 'Coincide con tu mood',
+    );
+  }
+}
+
+class AiRecapResult {
+  final String recap;
+  final List<String> highlights;
+  final bool ai;
+
+  const AiRecapResult({
+    required this.recap,
+    required this.highlights,
+    required this.ai,
+  });
+
+  factory AiRecapResult.fromJson(Map<String, dynamic> json) {
+    final highlights = json['highlights'];
+    return AiRecapResult(
+      recap: json['recap'] as String? ?? '',
+      highlights: highlights is List
+          ? highlights.map((item) => item.toString()).toList()
+          : const [],
+      ai: json['ai'] as bool? ?? false,
+    );
   }
 }
 

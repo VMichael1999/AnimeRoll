@@ -11,6 +11,8 @@ import '../../../core/theme/app_theme.dart';
 import '../../../shared/models/download_model.dart';
 import '../data/downloads_provider.dart';
 import '../../history/data/watch_history_provider.dart';
+import '../../marathon/data/marathon_provider.dart';
+import '../../marathon/presentation/marathon_hud.dart';
 
 class DownloadPlayerScreen extends ConsumerStatefulWidget {
   final String? downloadId;
@@ -43,6 +45,8 @@ class _DownloadPlayerScreenState extends ConsumerState<DownloadPlayerScreen> {
   bool _hasStartedCurrentVideo = false;
   Timer? _hideControlsTimer;
   DateTime? _lastHistorySaveAt;
+  Duration? _lastMarathonPosition;
+  String? _lastMarathonEpisodeKey;
 
   @override
   void initState() {
@@ -56,6 +60,7 @@ class _DownloadPlayerScreenState extends ConsumerState<DownloadPlayerScreen> {
     _hideControlsTimer?.cancel();
     final previous = _controller;
     _saveCurrentProgress(force: true);
+    _resetMarathonTick();
     previous?.removeListener(_onVideoTick);
     setState(() {
       _controller = null;
@@ -95,6 +100,7 @@ class _DownloadPlayerScreenState extends ConsumerState<DownloadPlayerScreen> {
     if (last == null || now.difference(last) >= const Duration(seconds: 10)) {
       _lastHistorySaveAt = now;
       _saveCurrentProgress();
+      _recordMarathonTick();
     }
     if (mounted) setState(() {});
   }
@@ -116,6 +122,7 @@ class _DownloadPlayerScreenState extends ConsumerState<DownloadPlayerScreen> {
     final title = current?.displayEpisodeTitle ?? widget.title;
     final animeTitle = current?.albumTitle ?? widget.animeTitle ?? 'AnimeRoll';
     final episodes = _albumEpisodes(downloads, current);
+    final marathon = ref.watch(marathonProvider);
 
     final videoStage = _VideoStage(
       controller: _controller,
@@ -192,6 +199,9 @@ class _DownloadPlayerScreenState extends ConsumerState<DownloadPlayerScreen> {
                           fallbackAnimeTitle: animeTitle,
                           duration: _controller?.value.duration,
                           episodes: episodes,
+                          marathon: marathon,
+                          onResetMarathon: () =>
+                              ref.read(marathonProvider.notifier).reset(),
                           onEpisodeTap: _openEpisode,
                         ),
                       ),
@@ -232,6 +242,7 @@ class _DownloadPlayerScreenState extends ConsumerState<DownloadPlayerScreen> {
     final path = episode.localPath;
     if (path == null || path.isEmpty || path == _currentPath) return;
     _saveCurrentProgress(force: true);
+    _resetMarathonTick();
     _activeDownloadId = episode.id;
     _activePath = path;
     await _initialize(path);
@@ -294,6 +305,34 @@ class _DownloadPlayerScreenState extends ConsumerState<DownloadPlayerScreen> {
   String get _currentPath {
     final current = _currentDownload(ref.read(downloadsProvider));
     return current?.localPath ?? _activePath;
+  }
+
+  void _recordMarathonTick() {
+    final controller = _controller;
+    if (controller == null ||
+        !controller.value.isInitialized ||
+        !controller.value.isPlaying) {
+      return;
+    }
+    final key = _historyKey(_activePath);
+    final position = controller.value.position;
+    final previous = _lastMarathonEpisodeKey == key
+        ? _lastMarathonPosition
+        : null;
+    _lastMarathonEpisodeKey = key;
+    _lastMarathonPosition = position;
+    if (previous == null) return;
+    final delta = position - previous;
+    unawaited(
+      ref
+          .read(marathonProvider.notifier)
+          .recordPlayback(episodeKey: key, delta: delta),
+    );
+  }
+
+  void _resetMarathonTick() {
+    _lastMarathonPosition = null;
+    _lastMarathonEpisodeKey = null;
   }
 
   Future<void> _togglePlay() async {
@@ -899,6 +938,8 @@ class _InfoPanel extends StatelessWidget {
   final String fallbackAnimeTitle;
   final Duration? duration;
   final List<DownloadModel> episodes;
+  final MarathonSession marathon;
+  final VoidCallback onResetMarathon;
   final ValueChanged<DownloadModel> onEpisodeTap;
 
   const _InfoPanel({
@@ -907,6 +948,8 @@ class _InfoPanel extends StatelessWidget {
     required this.fallbackAnimeTitle,
     required this.duration,
     required this.episodes,
+    required this.marathon,
+    required this.onResetMarathon,
     required this.onEpisodeTap,
   });
 
@@ -938,6 +981,8 @@ class _InfoPanel extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 12),
+        MarathonHud(session: marathon, onReset: onResetMarathon),
+        if (marathon.isActive) const SizedBox(height: 12),
         Wrap(
           spacing: 6,
           runSpacing: 6,

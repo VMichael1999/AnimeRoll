@@ -9,6 +9,7 @@ import '../../../shared/widgets/anime_card.dart';
 import '../../../shared/widgets/section_header.dart';
 import '../../../shared/widgets/wide_card.dart';
 import '../../downloads/data/downloads_provider.dart';
+import '../../favorites/data/favorites_provider.dart';
 import '../../history/data/watch_history_provider.dart';
 import '../../settings/data/settings_provider.dart';
 import '../data/home_provider.dart';
@@ -83,6 +84,14 @@ class HomeScreen extends ConsumerWidget {
           const SliverToBoxAdapter(child: _GenreFilter()),
           const SliverToBoxAdapter(child: SizedBox(height: 16)),
           const SliverToBoxAdapter(child: _ContinueWatching()),
+          const SliverToBoxAdapter(child: SizedBox(height: 16)),
+          SliverToBoxAdapter(
+            child: mainList.when(
+              data: (list) => _SpotlightSection(candidates: list),
+              loading: () => const SizedBox.shrink(),
+              error: (err, _) => const SizedBox.shrink(),
+            ),
+          ),
           const SliverToBoxAdapter(child: SizedBox(height: 16)),
           SliverToBoxAdapter(
             child: mainList.when(
@@ -538,6 +547,303 @@ class _ContinueWatching extends ConsumerWidget {
     }
     context.push(
       '/player?url=${Uri.encodeComponent(item.episodeUrl)}&title=${Uri.encodeComponent(item.episodeTitle)}&animeUrl=${Uri.encodeComponent(item.animeUrl)}',
+    );
+  }
+}
+
+// ── Spotlight ────────────────────────────────────────────────────────────────
+
+class _SpotlightSection extends ConsumerWidget {
+  final List<AnimeModel> candidates;
+
+  const _SpotlightSection({required this.candidates});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final spotlight = _SpotlightPick.from(
+      candidates: candidates,
+      favorites: ref.watch(favoritesProvider),
+      history: ref.watch(watchHistoryProvider),
+    );
+    if (spotlight == null) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SectionHeader(title: 'Sorpréndeme', action: null),
+          const SizedBox(height: 10),
+          _SpotlightCard(spotlight: spotlight),
+        ],
+      ),
+    );
+  }
+}
+
+class _SpotlightPick {
+  final AnimeModel anime;
+  final String reason;
+  final int match;
+
+  const _SpotlightPick({
+    required this.anime,
+    required this.reason,
+    required this.match,
+  });
+
+  static _SpotlightPick? from({
+    required List<AnimeModel> candidates,
+    required List<AnimeModel> favorites,
+    required List<WatchHistoryEntry> history,
+  }) {
+    final seenUrls = {
+      for (final item in favorites) item.url,
+      for (final item in history) item.animeUrl,
+    };
+    final genreWeights = <String, int>{};
+    for (final anime in favorites) {
+      for (final genre in anime.genres) {
+        genreWeights.update(genre, (value) => value + 3, ifAbsent: () => 3);
+      }
+    }
+    for (final item in history) {
+      final tokens = item.animeTitle.toLowerCase().split(RegExp(r'\W+'));
+      for (final token in tokens.where((token) => token.length > 4)) {
+        genreWeights.update(token, (value) => value + 1, ifAbsent: () => 1);
+      }
+    }
+
+    final ranked =
+        candidates
+            .where(
+              (anime) => anime.url.isNotEmpty && !seenUrls.contains(anime.url),
+            )
+            .map((anime) => MapEntry(anime, _scoreAnime(anime, genreWeights)))
+            .toList()
+          ..sort((a, b) => b.value.compareTo(a.value));
+
+    final entry = ranked.isNotEmpty
+        ? ranked.first
+        : candidates.isEmpty
+        ? null
+        : MapEntry(
+            candidates.first,
+            _scoreAnime(candidates.first, genreWeights),
+          );
+    if (entry == null) return null;
+
+    final matchedGenres = entry.key.genres
+        .where((genre) => genreWeights.containsKey(genre))
+        .take(2)
+        .toList();
+    final reason = matchedGenres.isNotEmpty
+        ? 'Porque sigues ${matchedGenres.join(' y ')}'
+        : entry.key.score != null
+        ? 'Buena valoración para descubrir algo nuevo'
+        : 'Una recomendación rápida fuera de tu lista';
+    return _SpotlightPick(
+      anime: entry.key,
+      reason: reason,
+      match: entry.value.clamp(72, 98),
+    );
+  }
+
+  static int _scoreAnime(AnimeModel anime, Map<String, int> genreWeights) {
+    var score = 70;
+    for (final genre in anime.genres) {
+      score += genreWeights[genre] ?? 0;
+    }
+    if (anime.cover != null) score += 4;
+    if (anime.status?.toLowerCase().contains('final') == true) score += 3;
+    if ((anime.score ?? 0) > 0) score += ((anime.score ?? 0) * 2).round();
+    if ((anime.episodeCount ?? 0) > 0 && (anime.episodeCount ?? 0) <= 24) {
+      score += 3;
+    }
+    return score;
+  }
+}
+
+class _SpotlightCard extends StatelessWidget {
+  final _SpotlightPick spotlight;
+
+  const _SpotlightCard({required this.spotlight});
+
+  @override
+  Widget build(BuildContext context) {
+    final anime = spotlight.anime;
+    return InkWell(
+      borderRadius: BorderRadius.circular(10),
+      onTap: () =>
+          context.push('/detail?url=${Uri.encodeComponent(anime.url)}'),
+      child: Container(
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              height: 164,
+              child: ClipRRect(
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(10),
+                ),
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    if (anime.cover != null)
+                      CachedNetworkImage(
+                        imageUrl: anime.cover!,
+                        fit: BoxFit.cover,
+                        errorWidget: (context, url, _) =>
+                            ColoredBox(color: AppColors.surface2),
+                      )
+                    else
+                      ColoredBox(color: AppColors.surface2),
+                    DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            Colors.transparent,
+                            AppColors.bg.withValues(alpha: 0.92),
+                          ],
+                        ),
+                      ),
+                    ),
+                    Positioned(
+                      left: 12,
+                      right: 12,
+                      bottom: 12,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Wrap(
+                            spacing: 6,
+                            runSpacing: 6,
+                            children: [
+                              _SpotlightPill(
+                                label: '${spotlight.match}% match',
+                                filled: true,
+                              ),
+                              if (anime.status != null)
+                                _SpotlightPill(label: anime.status!),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            anime.title,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w900,
+                              shadows: [Shadow(blurRadius: 8)],
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            [
+                              if (anime.year != null) anime.year,
+                              if (anime.episodeCount != null)
+                                '${anime.episodeCount} eps',
+                              if (anime.genres.isNotEmpty)
+                                anime.genres.take(2).join(' · '),
+                            ].join(' · '),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: AppColors.textSecondary,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: Row(
+                children: [
+                  Container(
+                    width: 34,
+                    height: 34,
+                    decoration: BoxDecoration(
+                      color: AppColors.accent.withValues(alpha: 0.16),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Icon(
+                      Icons.casino_rounded,
+                      color: AppColors.accent2,
+                      size: 19,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      spotlight.reason,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  FilledButton.icon(
+                    onPressed: () => context.push(
+                      '/detail?url=${Uri.encodeComponent(anime.url)}',
+                    ),
+                    icon: const Icon(Icons.play_arrow_rounded, size: 17),
+                    label: const Text('Ver'),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SpotlightPill extends StatelessWidget {
+  final String label;
+  final bool filled;
+
+  const _SpotlightPill({required this.label, this.filled = false});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: filled
+            ? AppColors.accent.withValues(alpha: 0.86)
+            : AppColors.bg.withValues(alpha: 0.72),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(
+          color: filled ? AppColors.accent2 : AppColors.border,
+        ),
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 10,
+          fontWeight: FontWeight.w900,
+        ),
+      ),
     );
   }
 }

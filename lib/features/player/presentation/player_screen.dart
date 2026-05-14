@@ -16,7 +16,10 @@ import '../../detail/data/detail_provider.dart';
 import '../../downloads/data/downloads_provider.dart';
 import '../../favorites/data/favorites_provider.dart';
 import '../../history/data/watch_history_provider.dart';
+import '../../marathon/data/marathon_provider.dart';
+import '../../marathon/presentation/marathon_hud.dart';
 import '../../settings/data/settings_provider.dart';
+import '../data/ai_recap_provider.dart';
 import '../data/player_provider.dart';
 
 class PlayerScreen extends ConsumerStatefulWidget {
@@ -47,6 +50,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   List<VideoServerModel> _lastServers = const [];
   AnimeDetailData? _latestDetail;
   DateTime? _lastHistorySaveAt;
+  Duration? _lastMarathonPosition;
+  String? _lastMarathonEpisodeKey;
 
   @override
   void dispose() {
@@ -64,6 +69,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     if (_initializingVideoUrl == videoUrl) return;
 
     _saveCurrentProgress(force: true);
+    _resetMarathonTick();
     _chewieController?.dispose();
     final previousController = _videoController;
     previousController?.removeListener(_onVideoProgress);
@@ -139,6 +145,35 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     }
     _lastHistorySaveAt = now;
     _saveCurrentProgress();
+    _recordMarathonTick();
+  }
+
+  void _recordMarathonTick() {
+    final controller = _videoController;
+    if (controller == null ||
+        !controller.value.isInitialized ||
+        !controller.value.isPlaying) {
+      return;
+    }
+    final position = controller.value.position;
+    final key = widget.episodeUrl;
+    final previous = _lastMarathonEpisodeKey == key
+        ? _lastMarathonPosition
+        : null;
+    _lastMarathonEpisodeKey = key;
+    _lastMarathonPosition = position;
+    if (previous == null) return;
+    final delta = position - previous;
+    unawaited(
+      ref
+          .read(marathonProvider.notifier)
+          .recordPlayback(episodeKey: key, delta: delta),
+    );
+  }
+
+  void _resetMarathonTick() {
+    _lastMarathonPosition = null;
+    _lastMarathonEpisodeKey = null;
   }
 
   void _saveCurrentProgress({bool force = false}) {
@@ -261,6 +296,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   Widget build(BuildContext context) {
     final serversAsync = ref.watch(serversProvider(widget.episodeUrl));
     final selectedIndex = ref.watch(selectedServerProvider);
+    final marathon = ref.watch(marathonProvider);
     final animeUrl = widget.animeUrl.isNotEmpty
         ? widget.animeUrl
         : _inferAnimeUrl(widget.episodeUrl);
@@ -361,11 +397,15 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                       onSetSleepTimer: _setSleepTimer,
                       onCancelSleepTimer: _cancelSleepTimer,
                       formatSleepTimer: _formatSleepTimer,
+                      marathon: marathon,
+                      onResetMarathon: () =>
+                          ref.read(marathonProvider.notifier).reset(),
                       onServerSelect: (i) {
                         ref
                             .read(preferredPlaybackServerProvider.notifier)
                             .set(servers[i].name);
                         ref.read(selectedServerProvider.notifier).state = i;
+                        _resetMarathonTick();
                         _chewieController?.dispose();
                         final controller = _videoController;
                         _saveCurrentProgress(force: true);
@@ -427,6 +467,8 @@ class _PlayerInfo extends ConsumerWidget {
   final ValueChanged<Duration> onSetSleepTimer;
   final VoidCallback onCancelSleepTimer;
   final String Function(Duration) formatSleepTimer;
+  final MarathonSession marathon;
+  final VoidCallback onResetMarathon;
   final ValueChanged<int> onServerSelect;
 
   const _PlayerInfo({
@@ -440,6 +482,8 @@ class _PlayerInfo extends ConsumerWidget {
     required this.onSetSleepTimer,
     required this.onCancelSleepTimer,
     required this.formatSleepTimer,
+    required this.marathon,
+    required this.onResetMarathon,
     this.onPiP,
     this.sleepTimerRemaining,
   });
@@ -537,6 +581,28 @@ class _PlayerInfo extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final historyEntry = ref.watch(
+      watchHistoryProvider.select(
+        (items) =>
+            items.where((item) => item.episodeUrl == episodeUrl).firstOrNull,
+      ),
+    );
+    final detail = detailAsync?.valueOrNull;
+    final episode = detail?.episodes
+        .where((item) => item.url == episodeUrl)
+        .firstOrNull;
+    final recapRequest =
+        historyEntry != null &&
+            !historyEntry.completed &&
+            historyEntry.percent > 0.08
+        ? AiRecapRequest(
+            animeTitle: detail?.anime.title ?? historyEntry.animeTitle,
+            episodeTitle: episode?.title ?? historyEntry.episodeTitle,
+            percent: historyEntry.percent,
+            synopsis: detail?.anime.synopsis,
+            episodeNumber: episode?.number ?? historyEntry.episodeNumber,
+          )
+        : null;
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -621,6 +687,12 @@ class _PlayerInfo extends ConsumerWidget {
             ],
           ),
           const SizedBox(height: 16),
+          if (recapRequest != null) ...[
+            _AiRecapCard(request: recapRequest),
+            const SizedBox(height: 16),
+          ],
+          MarathonHud(session: marathon, onReset: onResetMarathon),
+          if (marathon.isActive) const SizedBox(height: 16),
           _EpisodeNavigation(episodeUrl: episodeUrl, detailAsync: detailAsync),
           const SizedBox(height: 16),
           const Text(
@@ -638,6 +710,117 @@ class _PlayerInfo extends ConsumerWidget {
           const SizedBox(height: 22),
           _AnimeEpisodeInfo(title: title, detailAsync: detailAsync),
         ],
+      ),
+    );
+  }
+}
+
+class _AiRecapCard extends ConsumerWidget {
+  final AiRecapRequest request;
+
+  const _AiRecapCard({required this.request});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final recap = ref.watch(aiRecapProvider(request));
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppColors.accent.withValues(alpha: 0.35)),
+      ),
+      child: recap.when(
+        data: (data) => Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    color: AppColors.accent.withValues(alpha: 0.16),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(
+                    Icons.auto_awesome_rounded,
+                    color: AppColors.accent2,
+                    size: 18,
+                  ),
+                ),
+                const SizedBox(width: 9),
+                Expanded(
+                  child: Text(
+                    data.ai ? 'AI Recap' : 'Resumen rapido',
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Text(
+              data.recap,
+              style: const TextStyle(
+                color: AppColors.textSecondary,
+                fontSize: 12,
+                height: 1.35,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            if (data.highlights.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 7,
+                runSpacing: 7,
+                children: data.highlights
+                    .map(
+                      (item) => Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.surface2,
+                          borderRadius: BorderRadius.circular(7),
+                          border: Border.all(color: AppColors.border),
+                        ),
+                        child: Text(
+                          item,
+                          style: const TextStyle(
+                            color: AppColors.textSecondary,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                    )
+                    .toList(),
+              ),
+            ],
+          ],
+        ),
+        loading: () => const Row(
+          children: [
+            SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+            SizedBox(width: 10),
+            Text(
+              'Preparando recap...',
+              style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+            ),
+          ],
+        ),
+        error: (_, _) => const Text(
+          'No se pudo cargar el recap.',
+          style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+        ),
       ),
     );
   }

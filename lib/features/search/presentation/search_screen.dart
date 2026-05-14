@@ -28,7 +28,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     final mode = ref.watch(searchModeProvider);
     final activeProvider = ref.watch(providerPrefProvider);
     final isHentaila = activeProvider == 'hentaila.com';
-    final effectiveMode = isHentaila ? SearchMode.search : mode;
+    final effectiveMode = isHentaila ? SearchMode.catalog : mode;
 
     return Scaffold(
       body: SafeArea(
@@ -44,7 +44,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                     children: [
                       Expanded(
                         child: Text(
-                          isHentaila ? 'HentaiLA' : 'Buscar',
+                          isHentaila ? 'Catalogo de Hentai' : 'Buscar',
                           style: const TextStyle(
                             fontSize: 20,
                             fontWeight: FontWeight.w800,
@@ -665,6 +665,7 @@ class _NoResults extends StatelessWidget {
 }
 
 void _showCatalogFilters(BuildContext context, WidgetRef ref) {
+  final isHentaila = ref.read(providerPrefProvider) == 'hentaila.com';
   showModalBottomSheet<void>(
     context: context,
     backgroundColor: AppColors.surface,
@@ -674,6 +675,7 @@ void _showCatalogFilters(BuildContext context, WidgetRef ref) {
     ),
     builder: (_) => _CatalogFilterSheet(
       initialFilters: ref.read(catalogFiltersProvider),
+      isHentaila: isHentaila,
       onApply: (filters) {
         ref.read(catalogFiltersProvider.notifier).state = filters;
       },
@@ -683,10 +685,12 @@ void _showCatalogFilters(BuildContext context, WidgetRef ref) {
 
 class _CatalogFilterSheet extends StatefulWidget {
   final CatalogFilters initialFilters;
+  final bool isHentaila;
   final ValueChanged<CatalogFilters> onApply;
 
   const _CatalogFilterSheet({
     required this.initialFilters,
+    required this.isHentaila,
     required this.onApply,
   });
 
@@ -705,6 +709,38 @@ class _CatalogFilterSheetState extends State<_CatalogFilterSheet> {
     'Romance',
     'Shounen',
     'Slice of Life',
+  ];
+  static const _hentailaTypes = ['OVA'];
+  static const _hentailaGenres = [
+    '3D',
+    'Ahegao',
+    'Anal',
+    'Casadas',
+    'Chikan',
+    'Ecchi',
+    'Enfermeras',
+    'Escolares',
+    'Futanari',
+    'Gore',
+    'Hardcore',
+    'Harem',
+    'Incesto',
+    'Juegos Sexuales',
+    'Suspenso',
+    'Milfs',
+    'Maids',
+    'Netorare',
+    'Ninfomania',
+    'Ninjas',
+    'Orgias',
+    'Romance',
+    'Shota',
+    'Softcore',
+    'Succubus',
+    'Teacher',
+    'Tentaculos',
+    'Tetonas',
+    'Vanilla',
   ];
   static const _years = ['2026', '2025', '2024', '2023', '2022', '2021'];
   static const _statuses = ['En emisión', 'Finalizado', 'Próximamente'];
@@ -749,7 +785,7 @@ class _CatalogFilterSheetState extends State<_CatalogFilterSheet> {
           _FilterDropdown(
             label: 'Tipo',
             value: _draft.type,
-            values: _types,
+            values: widget.isHentaila ? _hentailaTypes : _types,
             onChanged: (value) => setState(
               () => _draft = _draft.copyWith(
                 type: value,
@@ -760,7 +796,7 @@ class _CatalogFilterSheetState extends State<_CatalogFilterSheet> {
           _FilterDropdown(
             label: 'Género',
             value: _draft.genre,
-            values: _genres,
+            values: widget.isHentaila ? _hentailaGenres : _genres,
             onChanged: (value) => setState(
               () => _draft = _draft.copyWith(
                 genre: value,

@@ -217,13 +217,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                 ),
               );
             }
-            final server =
-                servers[selectedIndex.clamp(0, servers.length - 1)];
+            final server = servers[selectedIndex.clamp(0, servers.length - 1)];
             if (!_isDirectVideoUrl(server.url)) {
               return _embedPlayer(server.url);
             }
-            if (_chewieController == null ||
-                _activeVideoUrl != server.url) {
+            if (_chewieController == null || _activeVideoUrl != server.url) {
               if (_initializingVideoUrl != server.url) {
                 WidgetsBinding.instance.addPostFrameCallback((_) {
                   _initPlayer(server);
@@ -333,7 +331,15 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
 
   String _inferAnimeUrl(String episodeUrl) {
     final uri = Uri.tryParse(episodeUrl);
-    if (uri == null || uri.pathSegments.length < 3) return '';
+    if (uri == null || uri.pathSegments.isEmpty) return '';
+    if (uri.host.contains('hentaila.com') &&
+        uri.pathSegments.length >= 2 &&
+        uri.pathSegments.first == 'ver') {
+      final episodeSlug = uri.pathSegments[1];
+      final animeSlug = episodeSlug.replaceFirst(RegExp(r'-\d+$'), '');
+      return uri.replace(pathSegments: ['media', animeSlug]).toString();
+    }
+    if (uri.pathSegments.length < 3) return '';
     final parentSegments = uri.pathSegments.take(uri.pathSegments.length - 1);
     return uri.replace(pathSegments: parentSegments).toString();
   }
@@ -668,6 +674,14 @@ class _EpisodeGridPanelState extends State<_EpisodeGridPanel> {
         final episodes = data.episodes;
         if (episodes.isEmpty) return const SizedBox.shrink();
 
+        if (data.anime.url.contains('hentaila.com')) {
+          return _HentailaEpisodeListPanel(
+            anime: data.anime,
+            episodes: episodes,
+            episodeUrl: widget.episodeUrl,
+          );
+        }
+
         final currentIndex = episodes.indexWhere(
           (episode) => episode.url == widget.episodeUrl,
         );
@@ -870,6 +884,161 @@ class _EpisodeRangeSelector extends StatelessWidget {
         label:
             '${selectedStart + 1} - ${(selectedStart + 100).clamp(1, total)}',
         showChevron: true,
+      ),
+    );
+  }
+}
+
+class _HentailaEpisodeListPanel extends StatelessWidget {
+  final AnimeModel anime;
+  final List<EpisodeModel> episodes;
+  final String episodeUrl;
+
+  const _HentailaEpisodeListPanel({
+    required this.anime,
+    required this.episodes,
+    required this.episodeUrl,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final current = episodes.firstWhere(
+      (episode) => episode.url == episodeUrl,
+      orElse: () => episodes.first,
+    );
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Estas viendo',
+            style: TextStyle(
+              fontSize: 11,
+              color: AppColors.accent2,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            current.title,
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 14),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: 290),
+            child: ListView.separated(
+              shrinkWrap: true,
+              itemCount: episodes.length,
+              separatorBuilder: (context, _) => const SizedBox(height: 8),
+              itemBuilder: (context, index) {
+                final episode = episodes[index];
+                final active = episode.url == episodeUrl;
+                return _HentailaEpisodeTile(
+                  anime: anime,
+                  episode: episode,
+                  active: active,
+                  onTap: () => context.pushReplacement(
+                    '/player?url=${Uri.encodeComponent(episode.url)}&title=${Uri.encodeComponent(episode.title)}&animeUrl=${Uri.encodeComponent(anime.url)}',
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HentailaEpisodeTile extends StatelessWidget {
+  final AnimeModel anime;
+  final EpisodeModel episode;
+  final bool active;
+  final VoidCallback onTap;
+
+  const _HentailaEpisodeTile({
+    required this.anime,
+    required this.episode,
+    required this.active,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final thumbnail = episode.thumbnail ?? anime.cover;
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: active
+              ? AppColors.accent.withValues(alpha: 0.14)
+              : AppColors.surface2,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: active ? AppColors.accent2 : Colors.transparent,
+          ),
+        ),
+        child: Row(
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: SizedBox(
+                width: 58,
+                height: 58,
+                child: thumbnail == null
+                    ? const ColoredBox(color: AppColors.surface)
+                    : Image.network(
+                        thumbnail,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) =>
+                            const ColoredBox(color: AppColors.surface),
+                      ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    episode.title,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w800,
+                      color: active ? AppColors.accent2 : AppColors.textPrimary,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    anime.title,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: AppColors.textSecondary,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+            if (active)
+              const Icon(
+                Icons.play_circle_fill_rounded,
+                color: AppColors.accent2,
+                size: 22,
+              ),
+          ],
+        ),
       ),
     );
   }

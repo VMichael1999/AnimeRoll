@@ -9,6 +9,7 @@ import '../../features/downloads/presentation/downloads_screen.dart';
 import '../../features/downloads/presentation/download_player_screen.dart';
 import '../../features/profile/presentation/profile_screen.dart';
 import '../../features/settings/presentation/settings_screen.dart';
+import '../../features/watchlist/presentation/watchlist_screen.dart';
 import '../shell/main_shell.dart';
 
 final appRouter = GoRouter(
@@ -34,6 +35,10 @@ final appRouter = GoRouter(
         GoRoute(
           path: '/settings',
           builder: (context, _) => const SettingsScreen(),
+        ),
+        GoRoute(
+          path: '/watchlist',
+          builder: (context, _) => const WatchlistScreen(),
         ),
       ],
     ),

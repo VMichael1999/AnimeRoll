@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'package:chewie/chewie.dart';
+import 'package:floating/floating.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -31,6 +33,9 @@ class PlayerScreen extends ConsumerStatefulWidget {
 }
 
 class _PlayerScreenState extends ConsumerState<PlayerScreen> {
+  final _floating = Floating();
+  Timer? _sleepTimer;
+  Duration? _sleepTimerRemaining;
   VideoPlayerController? _videoController;
   ChewieController? _chewieController;
   String? _activeVideoUrl;
@@ -40,6 +45,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
 
   @override
   void dispose() {
+    _sleepTimer?.cancel();
     _chewieController?.dispose();
     _videoController?.dispose();
     SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
@@ -141,6 +147,42 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         lower.contains('.mkv');
   }
 
+  Future<void> _enterPiP() async {
+    final available = await _floating.isPipAvailable;
+    if (!available || !mounted) return;
+    await _floating.enable(const ImmediatePiP(aspectRatio: Rational(16, 9)));
+  }
+
+  void _setSleepTimer(Duration duration) {
+    _sleepTimer?.cancel();
+    setState(() => _sleepTimerRemaining = duration);
+    _sleepTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      final remaining = _sleepTimerRemaining;
+      if (remaining == null || remaining.inSeconds <= 1) {
+        timer.cancel();
+        _videoController?.pause();
+        if (mounted) setState(() => _sleepTimerRemaining = null);
+        return;
+      }
+      if (mounted) {
+        setState(
+          () => _sleepTimerRemaining = remaining - const Duration(seconds: 1),
+        );
+      }
+    });
+  }
+
+  void _cancelSleepTimer() {
+    _sleepTimer?.cancel();
+    setState(() => _sleepTimerRemaining = null);
+  }
+
+  String _formatSleepTimer(Duration d) {
+    final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
+    return '$m:$s';
+  }
+
   Widget _embedPlayer(String url) {
     final controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
@@ -160,105 +202,131 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         ? null
         : ref.watch(animeDetailProvider(animeUrl));
 
-    return Scaffold(
-      backgroundColor: Colors.black,
-      body: Column(
-        children: [
-          // Video area
-          SafeArea(
-            bottom: false,
-            child: AspectRatio(
-              aspectRatio: 16 / 9,
-              child: serversAsync.when(
-                data: (servers) {
-                  _lastServers = servers;
-                  if (servers.isEmpty) {
-                    return const Center(
-                      child: Text(
-                        'Sin servidores disponibles',
-                        style: TextStyle(color: Colors.white),
-                      ),
-                    );
-                  }
-                  final server =
-                      servers[selectedIndex.clamp(0, servers.length - 1)];
-                  if (!_isDirectVideoUrl(server.url)) {
-                    return _embedPlayer(server.url);
-                  }
-                  if (_chewieController == null ||
-                      _activeVideoUrl != server.url) {
-                    if (_initializingVideoUrl != server.url) {
-                      WidgetsBinding.instance.addPostFrameCallback((_) {
-                        _initPlayer(server);
-                      });
-                    }
-                    if (_playerError != null) {
-                      return Center(
-                        child: Text(
-                          _playerError!,
-                          style: const TextStyle(color: Colors.white),
-                        ),
-                      );
-                    }
-                    return const Center(
-                      child: CircularProgressIndicator(color: Colors.white),
-                    );
-                  }
-                  return Chewie(controller: _chewieController!);
-                },
-                loading: () => const Center(
-                  child: CircularProgressIndicator(color: Colors.white),
+    final videoArea = SafeArea(
+      bottom: false,
+      child: AspectRatio(
+        aspectRatio: 16 / 9,
+        child: serversAsync.when(
+          data: (servers) {
+            _lastServers = servers;
+            if (servers.isEmpty) {
+              return const Center(
+                child: Text(
+                  'Sin servidores disponibles',
+                  style: TextStyle(color: Colors.white),
                 ),
-                error: (err, _) => const Center(
+              );
+            }
+            final server =
+                servers[selectedIndex.clamp(0, servers.length - 1)];
+            if (!_isDirectVideoUrl(server.url)) {
+              return _embedPlayer(server.url);
+            }
+            if (_chewieController == null ||
+                _activeVideoUrl != server.url) {
+              if (_initializingVideoUrl != server.url) {
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  _initPlayer(server);
+                });
+              }
+              if (_playerError != null) {
+                return Center(
                   child: Text(
-                    'Error al cargar el video',
-                    style: TextStyle(color: Colors.white),
+                    _playerError!,
+                    style: const TextStyle(color: Colors.white),
+                  ),
+                );
+              }
+              return const Center(
+                child: CircularProgressIndicator(color: Colors.white),
+              );
+            }
+            return Chewie(controller: _chewieController!);
+          },
+          loading: () => const Center(
+            child: CircularProgressIndicator(color: Colors.white),
+          ),
+          error: (err, _) => const Center(
+            child: Text(
+              'Error al cargar el video',
+              style: TextStyle(color: Colors.white),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) async {
+        if (didPop) return;
+        final router = GoRouter.of(context);
+        final available = await _floating.isPipAvailable;
+        if (available && mounted) {
+          await _floating.enable(
+            const ImmediatePiP(aspectRatio: Rational(16, 9)),
+          );
+        } else {
+          router.pop();
+        }
+      },
+      child: PiPSwitcher(
+        childWhenEnabled: ColoredBox(
+          color: Colors.black,
+          child: Center(child: videoArea),
+        ),
+        childWhenDisabled: Scaffold(
+          backgroundColor: Colors.black,
+          body: Column(
+            children: [
+              videoArea,
+              Expanded(
+                child: Container(
+                  color: AppColors.bg,
+                  child: serversAsync.when(
+                    data: (servers) => _PlayerInfo(
+                      title: widget.title,
+                      episodeUrl: widget.episodeUrl,
+                      servers: servers,
+                      selectedIndex: selectedIndex,
+                      detailAsync: detailAsync,
+                      onPiP: _enterPiP,
+                      sleepTimerRemaining: _sleepTimerRemaining,
+                      onSetSleepTimer: _setSleepTimer,
+                      onCancelSleepTimer: _cancelSleepTimer,
+                      formatSleepTimer: _formatSleepTimer,
+                      onServerSelect: (i) {
+                        ref
+                            .read(preferredPlaybackServerProvider.notifier)
+                            .set(servers[i].name);
+                        ref.read(selectedServerProvider.notifier).state = i;
+                        _chewieController?.dispose();
+                        final controller = _videoController;
+                        _chewieController = null;
+                        _videoController = null;
+                        _activeVideoUrl = null;
+                        _initializingVideoUrl = null;
+                        _playerError = null;
+                        controller?.dispose();
+                        if (_isDirectVideoUrl(servers[i].url)) {
+                          _initPlayer(servers[i]);
+                        } else {
+                          setState(() {});
+                        }
+                      },
+                    ),
+                    loading: () => const SizedBox.shrink(),
+                    error: (e, _) => ErrorView(
+                      message: 'Error al cargar servidores',
+                      onRetry: () =>
+                          ref.invalidate(serversProvider(widget.episodeUrl)),
+                    ),
                   ),
                 ),
               ),
-            ),
+            ],
           ),
-          // Bottom sheet
-          Expanded(
-            child: Container(
-              color: AppColors.bg,
-              child: serversAsync.when(
-                data: (servers) => _PlayerInfo(
-                  title: widget.title,
-                  episodeUrl: widget.episodeUrl,
-                  servers: servers,
-                  selectedIndex: selectedIndex,
-                  detailAsync: detailAsync,
-                  onServerSelect: (i) {
-                    ref
-                        .read(preferredPlaybackServerProvider.notifier)
-                        .set(servers[i].name);
-                    ref.read(selectedServerProvider.notifier).state = i;
-                    _chewieController?.dispose();
-                    final controller = _videoController;
-                    _chewieController = null;
-                    _videoController = null;
-                    _activeVideoUrl = null;
-                    _initializingVideoUrl = null;
-                    _playerError = null;
-                    controller?.dispose();
-                    if (_isDirectVideoUrl(servers[i].url)) {
-                      _initPlayer(servers[i]);
-                    } else {
-                      setState(() {});
-                    }
-                  },
-                ),
-                loading: () => const SizedBox.shrink(),
-                error: (e, _) => ErrorView(
-                  message: 'Error al cargar servidores',
-                  onRetry: () =>
-                      ref.invalidate(serversProvider(widget.episodeUrl)),
-                ),
-              ),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -277,6 +345,11 @@ class _PlayerInfo extends StatelessWidget {
   final List<VideoServerModel> servers;
   final int selectedIndex;
   final AsyncValue<AnimeDetailData>? detailAsync;
+  final VoidCallback? onPiP;
+  final Duration? sleepTimerRemaining;
+  final ValueChanged<Duration> onSetSleepTimer;
+  final VoidCallback onCancelSleepTimer;
+  final String Function(Duration) formatSleepTimer;
   final ValueChanged<int> onServerSelect;
 
   const _PlayerInfo({
@@ -286,7 +359,56 @@ class _PlayerInfo extends StatelessWidget {
     required this.selectedIndex,
     required this.detailAsync,
     required this.onServerSelect,
+    required this.onSetSleepTimer,
+    required this.onCancelSleepTimer,
+    required this.formatSleepTimer,
+    this.onPiP,
+    this.sleepTimerRemaining,
   });
+
+  void _showSleepTimerSheet(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const SizedBox(height: 8),
+          Container(
+            width: 36,
+            height: 4,
+            decoration: BoxDecoration(
+              color: AppColors.border,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const SizedBox(height: 14),
+          const Text(
+            'Sleep Timer',
+            style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
+          ),
+          const SizedBox(height: 8),
+          for (final minutes in [15, 30, 45, 60, 90])
+            ListTile(
+              leading: const Icon(
+                Icons.bedtime_rounded,
+                color: AppColors.accent2,
+                size: 20,
+              ),
+              title: Text('$minutes minutos'),
+              onTap: () {
+                Navigator.pop(ctx);
+                onSetSleepTimer(Duration(minutes: minutes));
+              },
+            ),
+          const SizedBox(height: 8),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -314,6 +436,61 @@ class _PlayerInfo extends StatelessWidget {
                   maxLines: 2,
                 ),
               ),
+              GestureDetector(
+                onTap: () => sleepTimerRemaining != null
+                    ? onCancelSleepTimer()
+                    : _showSleepTimerSheet(context),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 5,
+                  ),
+                  decoration: BoxDecoration(
+                    color: sleepTimerRemaining != null
+                        ? AppColors.accent.withValues(alpha: 0.18)
+                        : Colors.transparent,
+                    borderRadius: BorderRadius.circular(8),
+                    border: sleepTimerRemaining != null
+                        ? Border.all(color: AppColors.accent)
+                        : null,
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.bedtime_rounded,
+                        size: 16,
+                        color: sleepTimerRemaining != null
+                            ? AppColors.accent2
+                            : AppColors.textSecondary,
+                      ),
+                      if (sleepTimerRemaining != null) ...[
+                        const SizedBox(width: 4),
+                        Text(
+                          formatSleepTimer(sleepTimerRemaining!),
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: AppColors.accent2,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 4),
+              if (onPiP != null)
+                IconButton(
+                  icon: const Icon(
+                    Icons.picture_in_picture_alt_rounded,
+                    size: 20,
+                  ),
+                  onPressed: onPiP,
+                  padding: EdgeInsets.zero,
+                  color: AppColors.textSecondary,
+                  tooltip: 'Picture in Picture',
+                ),
             ],
           ),
           const SizedBox(height: 16),

@@ -100,3 +100,9 @@ final simultaneousDownloadsProvider =
         defaultValue: 3,
       ),
     );
+
+final accentColorIndexProvider =
+    StateNotifierProvider<PersistedSettingNotifier<int>, int>(
+      (ref) =>
+          PersistedSettingNotifier(key: 'accentColorIndex', defaultValue: 0),
+    );

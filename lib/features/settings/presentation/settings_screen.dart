@@ -105,6 +105,32 @@ class SettingsScreen extends ConsumerWidget {
             ),
             const SizedBox(height: 14),
             _SettingsSection(
+              title: 'Apariencia',
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Row(
+                        children: [
+                          Icon(Icons.palette_rounded, size: 18, color: AppColors.textSecondary),
+                          SizedBox(width: 10),
+                          Text(
+                            'Color de acento',
+                            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      _AccentColorPicker(),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            _SettingsSection(
               title: 'App',
               children: [
                 _SwitchRow(
@@ -486,6 +512,58 @@ class _PickerRow extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _AccentColorPicker extends ConsumerWidget {
+  const _AccentColorPicker();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final selected = ref.watch(accentColorIndexProvider);
+    return Wrap(
+      spacing: 12,
+      runSpacing: 10,
+      children: AppTheme.accentPresets.indexed.map((entry) {
+        final (i, preset) = entry;
+        final isSelected = i == selected;
+        return GestureDetector(
+          onTap: () => ref.read(accentColorIndexProvider.notifier).set(i),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: preset.secondary,
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: isSelected ? Colors.white : Colors.transparent,
+                    width: 2.5,
+                  ),
+                  boxShadow: isSelected
+                      ? [BoxShadow(color: preset.secondary.withValues(alpha: 0.5), blurRadius: 8)]
+                      : null,
+                ),
+                child: isSelected
+                    ? const Icon(Icons.check_rounded, color: Colors.white, size: 18)
+                    : null,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                preset.name,
+                style: TextStyle(
+                  fontSize: 10,
+                  color: isSelected ? AppColors.textPrimary : AppColors.textSecondary,
+                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.normal,
+                ),
+              ),
+            ],
+          ),
+        );
+      }).toList(),
     );
   }
 }

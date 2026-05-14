@@ -49,6 +49,7 @@ dependencies:
   # Video player (HLS)
   video_player: ^2.9.2
   chewie: ^1.8.5
+  floating: ^6.0.0
 
   # Storage
   shared_preferences: ^2.3.3

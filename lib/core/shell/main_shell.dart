@@ -13,8 +13,9 @@ class MainShell extends ConsumerWidget {
     if (!isHentaila && location.startsWith('/schedule')) return 1;
     if (location.startsWith('/search')) return isHentaila ? 1 : 2;
     if (location.startsWith('/favorites')) return isHentaila ? 2 : 3;
-    if (location.startsWith('/downloads')) return isHentaila ? 3 : 4;
-    if (location.startsWith('/settings')) return isHentaila ? 4 : 5;
+    if (location.startsWith('/watchlist')) return isHentaila ? 3 : 4;
+    if (location.startsWith('/downloads')) return isHentaila ? 4 : 5;
+    if (location.startsWith('/settings')) return isHentaila ? 5 : 6;
     return 0;
   }
 
@@ -27,7 +28,7 @@ class MainShell extends ConsumerWidget {
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: index,
         backgroundColor: AppColors.surface,
-        selectedItemColor: AppColors.accent2,
+        selectedItemColor: Theme.of(context).colorScheme.secondary,
         unselectedItemColor: AppColors.textSecondary,
         type: BottomNavigationBarType.fixed,
         elevation: 0,
@@ -41,8 +42,10 @@ class MainShell extends ConsumerWidget {
               case 2:
                 context.go('/favorites');
               case 3:
-                context.go('/downloads');
+                context.go('/watchlist');
               case 4:
+                context.go('/downloads');
+              case 5:
                 context.go('/settings');
             }
             return;
@@ -57,8 +60,10 @@ class MainShell extends ConsumerWidget {
             case 3:
               context.go('/favorites');
             case 4:
-              context.go('/downloads');
+              context.go('/watchlist');
             case 5:
+              context.go('/downloads');
+            case 6:
               context.go('/settings');
           }
         },
@@ -82,6 +87,10 @@ class MainShell extends ConsumerWidget {
       label: 'Favoritos',
     ),
     BottomNavigationBarItem(
+      icon: Icon(Icons.bookmark_rounded),
+      label: 'Mi Lista',
+    ),
+    BottomNavigationBarItem(
       icon: Icon(Icons.download_rounded),
       label: 'Descargas',
     ),
@@ -100,6 +109,10 @@ class MainShell extends ConsumerWidget {
     BottomNavigationBarItem(
       icon: Icon(Icons.favorite_rounded),
       label: 'Favoritos',
+    ),
+    BottomNavigationBarItem(
+      icon: Icon(Icons.bookmark_rounded),
+      label: 'Mi Lista',
     ),
     BottomNavigationBarItem(
       icon: Icon(Icons.download_rounded),

@@ -19,7 +19,12 @@ final popularAnimeProvider = FutureProvider<List<AnimeModel>>((ref) async {
     final hub = await ref.watch(hentailaHubProvider.future);
     return hub.latestMedia;
   }
-  return repo.searchImageFirst('a', limit: 12);
+  final providers = await ref.watch(availableProvidersProvider.future);
+  return repo.searchImageFirst(
+    'a',
+    limit: 12,
+    domains: providers.where((domain) => domain != 'hentaila.com').toList(),
+  );
 });
 
 final latestAnimeProvider = FutureProvider<List<AnimeModel>>((ref) async {
@@ -29,7 +34,12 @@ final latestAnimeProvider = FutureProvider<List<AnimeModel>>((ref) async {
     final hub = await ref.watch(hentailaHubProvider.future);
     return hub.latestEpisodes;
   }
-  return repo.searchImageFirst('one', limit: 12);
+  final providers = await ref.watch(availableProvidersProvider.future);
+  return repo.searchImageFirst(
+    'one',
+    limit: 12,
+    domains: providers.where((domain) => domain != 'hentaila.com').toList(),
+  );
 });
 
 final selectedHomeGenreProvider = StateProvider<String>((ref) => 'Todo');
@@ -46,7 +56,12 @@ final genreAnimeProvider = FutureProvider.family<List<AnimeModel>, String>((
   if (activeProvider == 'hentaila.com') {
     return repo.search(_genreQuery(genre), domain: activeProvider);
   }
-  return repo.searchImageFirst(_genreQuery(genre), limit: 24);
+  final providers = await ref.watch(availableProvidersProvider.future);
+  return repo.searchImageFirst(
+    _genreQuery(genre),
+    limit: 24,
+    domains: providers.where((domain) => domain != 'hentaila.com').toList(),
+  );
 });
 
 String _genreQuery(String genre) {

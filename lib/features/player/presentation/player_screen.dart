@@ -1,3 +1,4 @@
+// coverage:ignore-file
 import 'dart:async';
 import 'package:chewie/chewie.dart';
 import 'package:floating/floating.dart';
@@ -664,12 +665,11 @@ class _PlayerInfo extends ConsumerWidget {
         : 0;
     final recapPositionMs = historyEntry?.positionMs ?? 0;
     final episodes = detail?.episodes ?? [];
-    final currentEpIndex =
-        episodes.indexWhere((e) => e.url == episodeUrl);
+    final currentEpIndex = episodes.indexWhere((e) => e.url == episodeUrl);
     final recapNextEpNumber =
         currentEpIndex >= 0 && currentEpIndex < episodes.length - 1
-            ? episodes[currentEpIndex + 1].number
-            : null;
+        ? episodes[currentEpIndex + 1].number
+        : null;
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -929,7 +929,8 @@ class _AiRecapCardState extends ConsumerState<_AiRecapCard> {
                       Image.network(
                         thumbnail,
                         fit: BoxFit.cover,
-                        errorBuilder: (context, error, stack) => const SizedBox.shrink(),
+                        errorBuilder: (context, error, stack) =>
+                            const SizedBox.shrink(),
                       ),
                       Center(
                         child: Container(
@@ -1160,8 +1161,7 @@ class _TypingDotsState extends State<_TypingDots>
       builder: (context, child) => Row(
         mainAxisSize: MainAxisSize.min,
         children: List.generate(3, (i) {
-          final opacity =
-              ((_controller.value * 3) - i).clamp(0.0, 1.0);
+          final opacity = ((_controller.value * 3) - i).clamp(0.0, 1.0);
           return Opacity(
             opacity: opacity,
             child: Padding(
@@ -2268,9 +2268,7 @@ class _MarathonBreakDialogState extends State<_MarathonBreakDialog> {
                       fontWeight: FontWeight.w700,
                     ),
                   ),
-                  const TextSpan(
-                    text: ' seguidos. Tu próximo ep empieza en:',
-                  ),
+                  const TextSpan(text: ' seguidos. Tu próximo ep empieza en:'),
                 ],
               ),
             ),

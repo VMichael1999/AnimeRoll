@@ -165,6 +165,7 @@ class SettingsScreen extends ConsumerWidget {
   }
 
   void _showProviderPicker(BuildContext context, WidgetRef ref) {
+    final providersAsync = ref.read(availableProvidersProvider);
     showModalBottomSheet(
       context: context,
       backgroundColor: AppColors.surface,
@@ -181,18 +182,28 @@ class SettingsScreen extends ConsumerWidget {
               style: TextStyle(fontWeight: FontWeight.w700),
             ),
           ),
-          ...AppConstants.providers.map(
-            (p) => ListTile(
-              title: Text(p, style: TextStyle(fontSize: 13)),
-              trailing: ref.watch(providerPrefProvider) == p
-                  ? Icon(Icons.check_rounded, color: AppColors.accent2)
-                  : null,
-              onTap: () {
-                ref.read(providerPrefProvider.notifier).set(p);
-                Navigator.pop(context);
-              },
+          ...providersAsync
+              .maybeWhen(
+                data: (providers) => providers,
+                orElse: () => const <String>[],
+              )
+              .map(
+                (p) => ListTile(
+                  title: Text(p, style: TextStyle(fontSize: 13)),
+                  trailing: ref.watch(providerPrefProvider) == p
+                      ? Icon(Icons.check_rounded, color: AppColors.accent2)
+                      : null,
+                  onTap: () {
+                    ref.read(providerPrefProvider.notifier).set(p);
+                    Navigator.pop(context);
+                  },
+                ),
+              ),
+          if (providersAsync.isLoading)
+            const Padding(
+              padding: EdgeInsets.all(16),
+              child: CircularProgressIndicator(strokeWidth: 2),
             ),
-          ),
           const SizedBox(height: 8),
         ],
       ),

@@ -95,7 +95,11 @@ final searchResultsProvider = FutureProvider.autoDispose<List<AnimeModel>>((
   if (disposed) return [];
   final repo = ref.read(animeRepositoryProvider);
   if (domain == null) {
-    return repo.searchImageFirst(query.trim());
+    final providers = await ref.watch(availableProvidersProvider.future);
+    return repo.searchImageFirst(
+      query.trim(),
+      domains: providers.where((item) => item != 'hentaila.com').toList(),
+    );
   }
   return repo.search(query.trim(), domain: domain);
 });

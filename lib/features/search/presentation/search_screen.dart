@@ -559,13 +559,13 @@ class _ProviderModeBadge extends StatelessWidget {
   }
 }
 
-class _ProviderFilter extends StatelessWidget {
+class _ProviderFilter extends ConsumerWidget {
   final String? selected;
   final ValueChanged<String?> onSelect;
 
   const _ProviderFilter({required this.selected, required this.onSelect});
 
-  static const _labels = {
+  static const _labels = <String?, String>{
     null: 'Todos',
     'animeav1.com': 'AnimeAV1',
     'monoschinos2.com': 'MonosChinos',
@@ -575,12 +575,24 @@ class _ProviderFilter extends StatelessWidget {
   };
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final availableProviders = ref.watch(availableProvidersProvider);
+    final entries = availableProviders.maybeWhen(
+      data: (providers) => _labels.entries
+          .where((entry) => entry.key == null || providers.contains(entry.key))
+          .toList(),
+      orElse: () => _labels.entries.toList(),
+    );
+
+    if (selected != null && !entries.any((entry) => entry.key == selected)) {
+      Future.microtask(() => onSelect(null));
+    }
+
     return SizedBox(
       height: 30,
       child: ListView(
         scrollDirection: Axis.horizontal,
-        children: _labels.entries.map((e) {
+        children: entries.map((e) {
           final active = e.key == selected;
           return Padding(
             padding: const EdgeInsets.only(right: 8),

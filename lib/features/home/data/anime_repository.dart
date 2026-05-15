@@ -6,7 +6,9 @@ import '../../../shared/models/episode_model.dart';
 import '../../../shared/models/schedule_anime_model.dart';
 
 class AnimeRepository {
-  final Dio _dio = DioClient.create();
+  final Dio _dio;
+
+  AnimeRepository({Dio? dio}) : _dio = dio ?? DioClient.create();
 
   static const List<String> imageFirstDomains = [
     'animeav1.com',
@@ -15,6 +17,8 @@ class AnimeRepository {
     'jkanime.net',
     'animeflv.net',
   ];
+
+  static const Map<String, String> providerProbeQueries = {'hentaila.com': 'a'};
 
   Future<List<AnimeModel>> search(String query, {String? domain}) async {
     final response = await _dio.get(
@@ -153,14 +157,16 @@ class AnimeRepository {
   Future<List<AnimeModel>> searchImageFirst(
     String query, {
     int limit = 24,
+    List<String>? domains,
   }) async {
     final results = <AnimeModel>[];
     final fallbackResults = <AnimeModel>[];
     final seen = <String>{};
     final fallbackSeen = <String>{};
     final minimumUsableResults = limit < 12 ? limit : 12;
+    final searchDomains = _orderedImageDomains(domains ?? imageFirstDomains);
 
-    for (final domain in imageFirstDomains) {
+    for (final domain in searchDomains) {
       try {
         final items = await search(query, domain: domain);
         for (final item in items) {
@@ -201,6 +207,75 @@ class AnimeRepository {
     }
 
     return results;
+  }
+
+  Future<List<String>> availableProviders(List<String> providers) async {
+    final serverEnabled = await serverEnabledProviders();
+    final candidates = serverEnabled == null
+        ? providers
+        : providers.where(serverEnabled.contains).toList();
+    final available = <String>[];
+    await Future.wait(
+      candidates.map((domain) async {
+        if (await isProviderAvailable(domain)) {
+          available.add(domain);
+        }
+      }),
+    );
+    available.sort(
+      (a, b) => providers.indexOf(a).compareTo(providers.indexOf(b)),
+    );
+    if (available.isNotEmpty) return available;
+    return serverEnabled == null ? providers : candidates;
+  }
+
+  List<String> _orderedImageDomains(List<String> domains) {
+    final available = domains.toSet();
+    return [
+      ...imageFirstDomains.where(available.contains),
+      ...domains.where((domain) => !imageFirstDomains.contains(domain)),
+    ];
+  }
+
+  Future<List<String>?> serverEnabledProviders() async {
+    try {
+      final response = await _dio.get('/anime/providers');
+      final data = _responseData(response);
+      final enabled = data['enabled'];
+      if (enabled is List) {
+        return enabled.map((item) => item.toString()).toList();
+      }
+
+      final providers = data['providers'];
+      if (providers is List) {
+        return providers
+            .whereType<Map>()
+            .where((item) => item['enabled'] == true)
+            .map((item) => item['domain']?.toString())
+            .whereType<String>()
+            .toList();
+      }
+    } on Object {
+      return null;
+    }
+    return null;
+  }
+
+  Future<bool> isProviderAvailable(String domain) async {
+    try {
+      if (domain == 'hentaila.com') {
+        final hub = await hentailaHub();
+        return hub.featured.isNotEmpty ||
+            hub.latestMedia.isNotEmpty ||
+            hub.latestEpisodes.isNotEmpty ||
+            hub.genres.isNotEmpty;
+      }
+      final query = providerProbeQueries[domain] ?? 'naruto';
+      final results = await search(query, domain: domain);
+      return results.any((anime) => anime.url.isNotEmpty);
+    } on Object {
+      return false;
+    }
   }
 
   Map<String, dynamic> _responseData(Response<dynamic> response) {

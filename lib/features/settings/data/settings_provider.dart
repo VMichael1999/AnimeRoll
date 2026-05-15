@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/constants/app_constants.dart';
+import '../../home/data/anime_repository.dart';
 
 class PersistedSettingNotifier<T> extends StateNotifier<T> {
   final String key;
@@ -73,6 +74,21 @@ final providerPrefProvider =
         defaultValue: AppConstants.providers.first,
       ),
     );
+
+final availableProvidersProvider = FutureProvider<List<String>>((ref) async {
+  final repo = AnimeRepository();
+  final available = await repo.availableProviders(AppConstants.providers);
+  final providers = available.isEmpty ? AppConstants.providers : available;
+  final activeProvider = ref.read(providerPrefProvider);
+
+  if (!providers.contains(activeProvider)) {
+    Future.microtask(
+      () => ref.read(providerPrefProvider.notifier).set(providers.first),
+    );
+  }
+
+  return providers;
+});
 
 final qualityPrefProvider =
     StateNotifierProvider<PersistedSettingNotifier<String>, String>(

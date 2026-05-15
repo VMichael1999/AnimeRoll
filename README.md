@@ -42,11 +42,11 @@ Backend repository used during development:
 The app reads the API URL and API key from Dart defines:
 
 ```bash
---dart-define=ANIME_API_BASE_URL=http://localhost:3000/api/v1
+--dart-define=ANIME_API_BASE_URL=https://animea1v-api-production.up.railway.app/api/v1
 --dart-define=ANIME_API_KEY=dev-anime1v-key
 ```
 
-When testing on a physical Android device, use the Mac/local network IP instead of `localhost`, for example:
+When testing against a local backend on a physical Android device, use the PC/local network IP instead of `localhost`, for example:
 
 ```bash
 flutter run -d ZY32L4KVLJ \
@@ -74,11 +74,23 @@ Run tests:
 flutter test
 ```
 
+Generate coverage with an HTML report:
+
+```powershell
+.\tool\coverage.ps1
+```
+
+The report is written to:
+
+```text
+coverage/html/index.html
+```
+
 Run the app:
 
 ```bash
 flutter run \
-  --dart-define=ANIME_API_BASE_URL=http://localhost:3000/api/v1 \
+  --dart-define=ANIME_API_BASE_URL=https://animea1v-api-production.up.railway.app/api/v1 \
   --dart-define=ANIME_API_KEY=dev-anime1v-key
 ```
 

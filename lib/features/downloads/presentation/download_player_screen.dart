@@ -35,6 +35,8 @@ class DownloadPlayerScreen extends ConsumerStatefulWidget {
 }
 
 class _DownloadPlayerScreenState extends ConsumerState<DownloadPlayerScreen> {
+  static const _downloadPipChannel = MethodChannel('anime_roll/download_pip');
+
   final _floating = Floating();
   VideoPlayerController? _controller;
   Object? _error;
@@ -52,6 +54,7 @@ class _DownloadPlayerScreenState extends ConsumerState<DownloadPlayerScreen> {
   @override
   void initState() {
     super.initState();
+    _downloadPipChannel.setMethodCallHandler(_handleDownloadPiPCall);
     _activeDownloadId = widget.downloadId;
     _activePath = widget.localPath;
     _initialize(_activePath);
@@ -109,6 +112,7 @@ class _DownloadPlayerScreenState extends ConsumerState<DownloadPlayerScreen> {
   @override
   void dispose() {
     _hideControlsTimer?.cancel();
+    _downloadPipChannel.setMethodCallHandler(null);
     _saveCurrentProgress(force: true);
     _controller?.removeListener(_onVideoTick);
     _controller?.dispose();
@@ -386,6 +390,11 @@ class _DownloadPlayerScreenState extends ConsumerState<DownloadPlayerScreen> {
   }
 
   Future<void> _enterPiP() async {
+    if (Platform.isIOS) {
+      await _enterIosPiP();
+      return;
+    }
+
     final available = await _floating.isPipAvailable;
     if (!available || !mounted) return;
     if (_isFullscreen) {
@@ -396,6 +405,66 @@ class _DownloadPlayerScreenState extends ConsumerState<DownloadPlayerScreen> {
       await _restorePortraitChrome();
     }
     await _floating.enable(const ImmediatePiP(aspectRatio: Rational(16, 9)));
+  }
+
+  Future<void> _enterIosPiP() async {
+    final controller = _controller;
+    if (controller == null || !controller.value.isInitialized) return;
+
+    final path = _currentPath;
+    final uri = Uri.tryParse(path);
+    if (uri?.scheme == 'content') {
+      return;
+    }
+
+    if (_isFullscreen) {
+      setState(() {
+        _isFullscreen = false;
+        _showControls = true;
+      });
+      await _restorePortraitChrome();
+    }
+
+    final wasPlaying = controller.value.isPlaying;
+    final position = controller.value.position;
+    await controller.pause();
+
+    try {
+      await _downloadPipChannel.invokeMethod<bool>('start', {
+        'path': path,
+        'positionMs': position.inMilliseconds,
+        'speed': _speed,
+      });
+      _hasStartedCurrentVideo = true;
+    } on PlatformException {
+      if (wasPlaying && mounted && _controller == controller) {
+        await controller.play();
+      }
+    }
+  }
+
+  Future<void> _handleDownloadPiPCall(MethodCall call) async {
+    if (call.method != 'stopped') return;
+
+    final args = Map<Object?, Object?>.from(call.arguments as Map);
+    final positionMs = (args['positionMs'] as num?)?.toInt();
+    final shouldResume = args['resume'] == true;
+    final controller = _controller;
+    if (controller == null || !controller.value.isInitialized) return;
+
+    if (positionMs != null) {
+      var target = Duration(milliseconds: positionMs);
+      final duration = controller.value.duration;
+      if (target < Duration.zero) target = Duration.zero;
+      if (duration > Duration.zero && target > duration) target = duration;
+      await controller.seekTo(target);
+    }
+
+    if (shouldResume && mounted) {
+      _hasStartedCurrentVideo = true;
+      await controller.play();
+      _scheduleControlsHide();
+    }
   }
 
   void _toggleControls() {

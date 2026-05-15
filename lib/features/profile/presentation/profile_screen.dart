@@ -83,6 +83,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     final streak = _watchStreak(history);
     final recentActivity = _activityByDay(history);
     final genres = _favoriteGenres(favorites);
+    final weeklyEpisodes = _weeklyCompletedEpisodes(history);
+    final weeklyHours = _weeklyHours(history);
     final stats = _ProfileProgressStats(
       watchedHours: watchedHours,
       completedEpisodes: completedEpisodes,
@@ -90,7 +92,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       streak: streak,
       favorites: favorites.length,
       savedEpisodes: saved.length,
-      weeklyEpisodes: _weeklyCompletedEpisodes(history),
+      weeklyEpisodes: weeklyEpisodes,
       favoriteGenres: genres.length,
     );
     final level = _LevelProgress.fromStats(stats);
@@ -103,106 +105,126 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     return Scaffold(
       body: SafeArea(
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(30, 18, 30, 28),
+          padding: EdgeInsets.zero,
           children: [
-            Align(
-              alignment: Alignment.centerLeft,
-              child: IconButton(
-                tooltip: 'Volver',
-                onPressed: () =>
-                    context.canPop() ? context.pop() : context.go('/home'),
-                icon: Icon(Icons.arrow_back_ios_new_rounded),
-              ),
-            ),
-            const SizedBox(height: 4),
-            const _ProfileHeader(),
-            const SizedBox(height: 22),
+            _TopBar(),
+            _ProfileHero(level: level),
             MarathonHud(
               session: marathon,
               onReset: () => ref.read(marathonProvider.notifier).reset(),
             ),
-            if (marathon.isActive) const SizedBox(height: 18),
-            GridView.count(
-              crossAxisCount: 2,
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              crossAxisSpacing: 10,
-              mainAxisSpacing: 10,
-              childAspectRatio: 1.28,
-              children: [
-                _ProfileStat(
-                  icon: Icons.timer_rounded,
-                  label: 'Tiempo total',
-                  value: '$watchedHours h',
-                  color: AppColors.accent2,
-                  iconBackground: AppColors.accent.withValues(alpha: 0.22),
-                ),
-                _ProfileStat(
-                  icon: Icons.check_rounded,
-                  label: 'Eps vistos',
-                  value: '$completedEpisodes',
-                  color: AppColors.success,
-                  iconBackground: AppColors.success.withValues(alpha: 0.18),
-                ),
-                _ProfileStat(
-                  icon: Icons.receipt_long_rounded,
-                  label: 'Series totales',
-                  value: '$series',
-                  color: AppColors.warning,
-                  iconBackground: AppColors.warning.withValues(alpha: 0.18),
-                ),
-                _ProfileStat(
-                  icon: Icons.local_fire_department_rounded,
-                  label: 'Racha días',
-                  value: '$streak',
-                  color: AppColors.accent2,
-                  iconBackground: AppColors.accent.withValues(alpha: 0.22),
-                  valuePrefix: streak > 0 ? '🔥 ' : null,
-                ),
-              ],
+            const _SectionHeader(title: 'Accesos rápidos'),
+            _QuickActions(
+              favoritesCount: favorites.length,
+              downloadsCount: saved.length,
+              historyCount: history.length,
+              watchlistCount: favorites.length,
             ),
-            const SizedBox(height: 18),
-            _LevelCard(level: level),
-            const SizedBox(height: 18),
-            const _SectionTitle('Logros recientes'),
-            const SizedBox(height: 10),
-            _AchievementGrid(achievements: achievements),
-            const SizedBox(height: 18),
-            const _SectionTitle('Retos semanales'),
-            const SizedBox(height: 10),
-            Column(
-              children: challenges
-                  .map((challenge) => _ChallengeCard(challenge: challenge))
-                  .toList(),
-            ),
-            const SizedBox(height: 20),
-            const _SectionTitle('Géneros favoritos'),
-            const SizedBox(height: 10),
-            if (genres.isEmpty)
-              const Text(
-                'Agrega favoritos para construir tus estadísticas.',
-                style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
-              )
-            else
-              Column(
-                children: genres.take(5).map((entry) {
-                  final max = genres.first.value;
-                  final percent = max == 0 ? 0.0 : entry.value / max;
-                  return _GenreBar(name: entry.key, percent: percent);
-                }).toList(),
+            const _SectionHeader(title: 'Estadísticas'),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: GridView.count(
+                crossAxisCount: 2,
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                crossAxisSpacing: 10,
+                mainAxisSpacing: 10,
+                childAspectRatio: 1.32,
+                children: [
+                  _StatCard(
+                    icon: Icons.timer_rounded,
+                    label: 'Tiempo total',
+                    value: '$watchedHours',
+                    valueSuffix: 'h',
+                    color: AppColors.accent2,
+                    iconBg: AppColors.accent.withValues(alpha: 0.22),
+                    glow: AppColors.accent2.withValues(alpha: 0.25),
+                    trend: weeklyHours > 0 ? '+${weeklyHours}h' : null,
+                  ),
+                  _StatCard(
+                    icon: Icons.check_rounded,
+                    label: 'Eps vistos',
+                    value: '$completedEpisodes',
+                    color: AppColors.success,
+                    iconBg: AppColors.success.withValues(alpha: 0.18),
+                    glow: AppColors.success.withValues(alpha: 0.18),
+                    trend: weeklyEpisodes > 0 ? '+$weeklyEpisodes' : null,
+                  ),
+                  _StatCard(
+                    icon: Icons.receipt_long_rounded,
+                    label: 'Series totales',
+                    value: '$series',
+                    color: AppColors.warning,
+                    iconBg: AppColors.warning.withValues(alpha: 0.18),
+                    glow: AppColors.warning.withValues(alpha: 0.18),
+                  ),
+                  _StatCard(
+                    icon: Icons.local_fire_department_rounded,
+                    label: 'Racha',
+                    value: '$streak',
+                    valueSuffix: 'd',
+                    color: AppColors.error,
+                    iconBg: AppColors.error.withValues(alpha: 0.18),
+                    glow: AppColors.error.withValues(alpha: 0.18),
+                  ),
+                ],
               ),
-            const SizedBox(height: 26),
-            const _SectionTitle('Actividad (últimas 10 semanas)'),
-            const SizedBox(height: 10),
-            _ActivityGrid(activity: recentActivity),
-            const SizedBox(height: 12),
-            const _ActivityLegend(),
-            const SizedBox(height: 24),
-            TextButton.icon(
-              onPressed: () => context.go('/history'),
-              icon: Icon(Icons.history_rounded, size: 18),
-              label: const Text('Ver historial completo'),
             ),
+            _SectionHeader(
+              title: 'Logros',
+              action: 'Ver todos (${achievements.length})',
+              onAction: () {},
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: GridView.count(
+                crossAxisCount: 3,
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                crossAxisSpacing: 8,
+                mainAxisSpacing: 8,
+                childAspectRatio: 0.85,
+                children: achievements
+                    .map((a) => _AchievementTile(achievement: a))
+                    .toList(),
+              ),
+            ),
+            const _SectionHeader(title: 'Retos semanales'),
+            ...challenges.map((c) => _ChallengeCard(challenge: c)),
+            const _SectionHeader(title: 'Géneros favoritos'),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: genres.isEmpty
+                  ? const Text(
+                      'Agrega favoritos para construir tus estadísticas.',
+                      style: TextStyle(
+                          color: AppColors.textSecondary, fontSize: 12),
+                    )
+                  : Column(
+                      children: genres.take(5).toList().asMap().entries.map((e) {
+                        final max = genres.first.value;
+                        final percent =
+                            max == 0 ? 0.0 : e.value.value / max;
+                        return _GenreRow(
+                          rank: e.key + 1,
+                          name: e.value.key,
+                          percent: percent,
+                        );
+                      }).toList(),
+                    ),
+            ),
+            const _SectionHeader(
+              title: 'Actividad',
+              trailing: 'Últimas 10 semanas',
+            ),
+            _ActivitySection(activity: recentActivity),
+            const SizedBox(height: 16),
+            _HistoryCard(
+              episodes: completedEpisodes,
+              series: series,
+              onTap: () => context.go('/history'),
+            ),
+            const SizedBox(height: 24),
           ],
         ),
       ),
@@ -232,16 +254,28 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
   static int _weeklyCompletedEpisodes(List<WatchHistoryEntry> history) {
     final now = DateTime.now();
-    final weekStart = DateTime(
-      now.year,
-      now.month,
-      now.day,
-    ).subtract(Duration(days: now.weekday - 1));
+    final weekStart = DateTime(now.year, now.month, now.day)
+        .subtract(Duration(days: now.weekday - 1));
     return history.where((item) {
       if (!item.completed) return false;
       final updatedAt = DateTime.tryParse(item.updatedAt);
       return updatedAt != null && !updatedAt.isBefore(weekStart);
     }).length;
+  }
+
+  static int _weeklyHours(List<WatchHistoryEntry> history) {
+    final now = DateTime.now();
+    final weekStart = DateTime(now.year, now.month, now.day)
+        .subtract(Duration(days: now.weekday - 1));
+    final ms = history.where((item) {
+      final updatedAt = DateTime.tryParse(item.updatedAt);
+      return updatedAt != null && !updatedAt.isBefore(weekStart);
+    }).fold<int>(
+      0,
+      (total, item) =>
+          total + (item.completed ? item.durationMs : item.positionMs),
+    );
+    return ms ~/ Duration.millisecondsPerHour;
   }
 
   static int _watchStreak(List<WatchHistoryEntry> history) {
@@ -257,6 +291,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     return streak;
   }
 }
+
+// ── Data classes ──────────────────────────────────────────────────────────────
 
 class _ProfileProgressStats {
   final int watchedHours;
@@ -301,11 +337,12 @@ class _LevelProgress {
     required this.title,
   });
 
-  // Cuenta exclusiva del creador hasta implementar auth
   static const _ownerAccount = true;
 
   double get percent => nextLevelXp == 0 ? 1.0 : currentXp / nextLevelXp;
-  int get remainingXp => nextLevelXp == 0 ? 0 : (nextLevelXp - currentXp).clamp(0, nextLevelXp);
+  int get remainingXp =>
+      nextLevelXp == 0 ? 0 : (nextLevelXp - currentXp).clamp(0, nextLevelXp);
+  bool get isMax => nextLevelXp == 0;
 
   factory _LevelProgress.fromStats(_ProfileProgressStats stats) {
     if (_ownerAccount) {
@@ -313,7 +350,7 @@ class _LevelProgress {
         level: 999,
         currentXp: stats.xp,
         nextLevelXp: 0,
-        title: '👑 Creador',
+        title: 'Creador · Miembro premium',
       );
     }
     final level = (stats.xp ~/ 500).clamp(1, 99);
@@ -339,6 +376,8 @@ class _Achievement {
   final String description;
   final bool unlocked;
   final Color color;
+  final int current;
+  final int target;
 
   const _Achievement({
     required this.icon,
@@ -346,53 +385,68 @@ class _Achievement {
     required this.description,
     required this.unlocked,
     required this.color,
+    required this.current,
+    required this.target,
   });
 
+  double get progress =>
+      target == 0 ? 0 : (current / target).clamp(0.0, 1.0);
+
   static List<_Achievement> fromStats(_ProfileProgressStats stats) {
-    // En modo owner los logros se muestran bloqueados hasta implementar auth
-    const owner = _LevelProgress._ownerAccount;
     return [
       _Achievement(
         icon: Icons.local_fire_department_rounded,
         name: 'Maratonista',
-        description: '5 eps en una semana',
-        unlocked: owner || stats.weeklyEpisodes >= 5,
+        description: '5 eps/semana',
+        unlocked: stats.weeklyEpisodes >= 5,
         color: AppColors.error,
+        current: stats.weeklyEpisodes,
+        target: 5,
       ),
       _Achievement(
         icon: Icons.calendar_month_rounded,
-        name: 'Racha ${stats.streak}',
+        name: 'Racha de 7',
         description: '7 días seguidos',
-        unlocked: owner || stats.streak >= 7,
+        unlocked: stats.streak >= 7,
         color: AppColors.warning,
+        current: stats.streak,
+        target: 7,
       ),
       _Achievement(
         icon: Icons.explore_rounded,
         name: 'Explorador',
         description: '5 géneros favoritos',
-        unlocked: owner || stats.favoriteGenres >= 5,
+        unlocked: stats.favoriteGenres >= 5,
         color: AppColors.accent2,
+        current: stats.favoriteGenres,
+        target: 5,
       ),
       _Achievement(
         icon: Icons.check_circle_rounded,
         name: 'Constante',
         description: '25 eps vistos',
-        unlocked: owner || stats.completedEpisodes >= 25,
+        unlocked: stats.completedEpisodes >= 25,
         color: AppColors.success,
+        current: stats.completedEpisodes,
+        target: 25,
       ),
       _Achievement(
         icon: Icons.bookmark_rounded,
         name: 'Curador',
         description: '10 favoritos',
-        unlocked: owner || stats.favorites >= 10,
+        unlocked: stats.favorites >= 10,
         color: AppColors.accent,
+        current: stats.favorites,
+        target: 10,
       ),
       _Achievement(
         icon: Icons.offline_pin_rounded,
         name: 'Offline',
         description: '5 eps guardados',
-        unlocked: owner || stats.savedEpisodes >= 5,
+        unlocked: stats.savedEpisodes >= 5,
         color: AppColors.success,
+        current: stats.savedEpisodes,
+        target: 5,
       ),
     ];
   }
@@ -453,39 +507,325 @@ class _WeeklyChallenge {
   }
 }
 
-class _ProfileHeader extends StatelessWidget {
-  const _ProfileHeader();
+// ── Top bar ──────────────────────────────────────────────────────────────────
+
+class _TopBar extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(6, 6, 12, 0),
+      child: Row(
+        children: [
+          IconButton(
+            tooltip: 'Volver',
+            onPressed: () =>
+                context.canPop() ? context.pop() : context.go('/home'),
+            icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
+          ),
+          const Expanded(
+            child: Center(
+              child: Text(
+                'Mi perfil',
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
+              ),
+            ),
+          ),
+          IconButton(
+            tooltip: 'Ajustes',
+            onPressed: () => context.go('/settings'),
+            icon: Icon(
+              Icons.settings_outlined,
+              size: 20,
+              color: AppColors.accent2,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Profile hero ──────────────────────────────────────────────────────────────
+
+class _ProfileHero extends StatelessWidget {
+  final _LevelProgress level;
+  const _ProfileHero({required this.level});
 
   @override
   Widget build(BuildContext context) {
-    return Row(
+    return Stack(
       children: [
-        CircleAvatar(
-          radius: 31,
-          backgroundColor: AppColors.accent2,
-          child: Text(
-            'M',
-            style: TextStyle(fontSize: 23, fontWeight: FontWeight.w900),
+        Positioned(
+          top: -80,
+          left: 0,
+          right: 0,
+          height: 280,
+          child: IgnorePointer(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: RadialGradient(
+                  center: Alignment.topCenter,
+                  radius: 0.8,
+                  colors: [
+                    AppColors.accent.withValues(alpha: 0.35),
+                    AppColors.accent2.withValues(alpha: 0.12),
+                    Colors.transparent,
+                  ],
+                  stops: const [0.0, 0.4, 1.0],
+                ),
+              ),
+            ),
           ),
         ),
-        SizedBox(width: 14),
-        Expanded(
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 18),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                'Michael',
-                style: TextStyle(fontSize: 17, fontWeight: FontWeight.w900),
+              Row(
+                children: [
+                  _AvatarRing(level: level.level),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            const Text(
+                              'Michael',
+                              style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w900),
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              '✨',
+                              style: TextStyle(
+                                fontSize: 14,
+                                shadows: [
+                                  Shadow(
+                                      color: AppColors.accent2
+                                          .withValues(alpha: 0.6),
+                                      blurRadius: 8),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          level.title.toUpperCase(),
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: AppColors.accent2,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.5,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Otaku de corazón · Desde ene 2024',
+                          style: TextStyle(
+                            color: AppColors.textSecondary,
+                            fontSize: 11,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                  GestureDetector(
+                    onTap: () {},
+                    child: Container(
+                      width: 32,
+                      height: 32,
+                      decoration: BoxDecoration(
+                        color: AppColors.accent.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: AppColors.accent2.withValues(alpha: 0.3),
+                        ),
+                      ),
+                      child: Icon(
+                        Icons.edit_outlined,
+                        size: 14,
+                        color: AppColors.accent2,
+                      ),
+                    ),
+                  ),
+                ],
               ),
-              SizedBox(height: 3),
-              Text(
-                'Otaku de corazón 🎮',
-                style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+              const SizedBox(height: 14),
+              _XpBar(level: level),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _AvatarRing extends StatelessWidget {
+  final int level;
+  const _AvatarRing({required this.level});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 76,
+      height: 76,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Container(
+            width: 76,
+            height: 76,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: SweepGradient(
+                colors: [
+                  AppColors.accent,
+                  AppColors.accent2,
+                  AppColors.accent,
+                  AppColors.accent2,
+                  AppColors.accent,
+                ],
               ),
-              SizedBox(height: 3),
-              Text(
-                'Miembro desde enero 2024',
-                style: TextStyle(color: AppColors.accent2, fontSize: 11),
+            ),
+            padding: const EdgeInsets.all(3),
+            child: Container(
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: AppColors.bg,
+              ),
+              padding: const EdgeInsets.all(3),
+              child: Container(
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [AppColors.accent, AppColors.accent2],
+                  ),
+                ),
+                child: const Center(
+                  child: Text(
+                    'M',
+                    style: TextStyle(
+                      fontSize: 28,
+                      fontWeight: FontWeight.w900,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            bottom: -2,
+            right: -4,
+            child: Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFFF59E0B), Color(0xFFF97316)],
+                ),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: AppColors.bg, width: 2),
+              ),
+              child: Text(
+                '👑 $level',
+                style: const TextStyle(
+                  fontSize: 9,
+                  fontWeight: FontWeight.w900,
+                  color: Colors.white,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _XpBar extends StatelessWidget {
+  final _LevelProgress level;
+  const _XpBar({required this.level});
+
+  @override
+  Widget build(BuildContext context) {
+    final percent = level.percent.clamp(0.0, 1.0);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text.rich(
+              TextSpan(
+                children: [
+                  TextSpan(
+                    text: '${level.currentXp} XP',
+                    style: const TextStyle(
+                      color: AppColors.textPrimary,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  TextSpan(
+                    text: level.isMax
+                        ? ' · Nivel máximo'
+                        : ' · faltan ${level.remainingXp}',
+                    style: TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Spacer(),
+            Text(
+              '${(percent * 100).round()}%',
+              style: TextStyle(
+                color: AppColors.accent2,
+                fontSize: 10,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 5),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(3),
+          child: Stack(
+            children: [
+              Container(
+                height: 6,
+                color: Colors.white.withValues(alpha: 0.06),
+              ),
+              FractionallySizedBox(
+                widthFactor: percent,
+                child: Container(
+                  height: 6,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [AppColors.accent, AppColors.accent2],
+                    ),
+                    borderRadius: BorderRadius.circular(3),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppColors.accent2.withValues(alpha: 0.5),
+                        blurRadius: 8,
+                      ),
+                    ],
+                  ),
+                ),
               ),
             ],
           ),
@@ -495,248 +835,203 @@ class _ProfileHeader extends StatelessWidget {
   }
 }
 
-class _ProfileStat extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final String value;
-  final Color color;
-  final Color iconBackground;
-  final String? valuePrefix;
+// ── Section header ────────────────────────────────────────────────────────────
 
-  const _ProfileStat({
-    required this.icon,
-    required this.label,
-    required this.value,
-    required this.color,
-    required this.iconBackground,
-    this.valuePrefix,
+class _SectionHeader extends StatelessWidget {
+  final String title;
+  final String? action;
+  final String? trailing;
+  final VoidCallback? onAction;
+
+  const _SectionHeader({
+    required this.title,
+    this.action,
+    this.trailing,
+    this.onAction,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(13),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 18, 16, 8),
+      child: Row(
         children: [
           Container(
-            width: 29,
-            height: 29,
+            width: 3,
+            height: 16,
             decoration: BoxDecoration(
-              color: iconBackground,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Icon(icon, color: color, size: 18),
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text.rich(
-                TextSpan(
-                  children: [
-                    if (valuePrefix != null)
-                      TextSpan(
-                        text: valuePrefix,
-                        style: TextStyle(fontSize: 18),
-                      ),
-                    TextSpan(text: value),
-                  ],
-                ),
-                style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900),
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [AppColors.accent, AppColors.accent2],
               ),
-              Text(
-                label.toUpperCase(),
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              title,
+              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w900),
+            ),
+          ),
+          if (action != null)
+            GestureDetector(
+              onTap: onAction,
+              child: Text(
+                '$action →',
                 style: TextStyle(
-                  color: AppColors.textSecondary,
-                  fontSize: 10,
+                  fontSize: 11,
+                  color: AppColors.accent2,
                   fontWeight: FontWeight.w700,
-                  letterSpacing: 0,
                 ),
               ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _LevelCard extends StatelessWidget {
-  final _LevelProgress level;
-
-  const _LevelCard({required this.level});
-
-  @override
-  Widget build(BuildContext context) {
-    final percent = level.percent.clamp(0.0, 1.0);
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 54,
-                height: 54,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: LinearGradient(
-                    colors: [AppColors.accent, AppColors.accent2],
-                  ),
-                ),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      'LVL',
-                      style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.75),
-                        fontSize: 9,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                    Text(
-                      '${level.level}',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 18,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 13),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      level.title,
-                      style: const TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      level.nextLevelXp == 0
-                          ? '${level.currentXp} XP · Nivel máximo'
-                          : '${level.currentXp} / ${level.nextLevelXp} XP · faltan ${level.remainingXp}',
-                      style: const TextStyle(
-                        color: AppColors.textSecondary,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 13),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(4),
-            child: LinearProgressIndicator(
-              value: percent,
-              minHeight: 7,
-              backgroundColor: AppColors.border,
-              valueColor: AlwaysStoppedAnimation(AppColors.accent2),
             ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _AchievementGrid extends StatelessWidget {
-  final List<_Achievement> achievements;
-
-  const _AchievementGrid({required this.achievements});
-
-  @override
-  Widget build(BuildContext context) {
-    return GridView.count(
-      crossAxisCount: 3,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      crossAxisSpacing: 8,
-      mainAxisSpacing: 8,
-      childAspectRatio: 0.9,
-      children: achievements
-          .map((achievement) => _AchievementTile(achievement: achievement))
-          .toList(),
-    );
-  }
-}
-
-class _AchievementTile extends StatelessWidget {
-  final _Achievement achievement;
-
-  const _AchievementTile({required this.achievement});
-
-  @override
-  Widget build(BuildContext context) {
-    final color = achievement.unlocked
-        ? achievement.color
-        : AppColors.textSecondary;
-    return Container(
-      padding: const EdgeInsets.all(9),
-      decoration: BoxDecoration(
-        color: achievement.unlocked
-            ? AppColors.surface
-            : AppColors.surface.withValues(alpha: 0.55),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: achievement.unlocked
-              ? achievement.color.withValues(alpha: 0.35)
-              : AppColors.border,
-        ),
-      ),
-      child: Opacity(
-        opacity: achievement.unlocked ? 1 : 0.55,
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              width: 32,
-              height: 32,
-              decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.16),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Icon(achievement.icon, color: color, size: 18),
-            ),
-            const SizedBox(height: 8),
+          if (trailing != null)
             Text(
-              achievement.name,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w900),
-            ),
-            const SizedBox(height: 3),
-            Text(
-              achievement.description,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
+              trailing!,
+              style: TextStyle(
+                fontSize: 10,
                 color: AppColors.textSecondary,
-                fontSize: 9,
-                fontWeight: FontWeight.w600,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Quick actions ─────────────────────────────────────────────────────────────
+
+class _QuickActions extends StatelessWidget {
+  final int favoritesCount;
+  final int downloadsCount;
+  final int historyCount;
+  final int watchlistCount;
+
+  const _QuickActions({
+    required this.favoritesCount,
+    required this.downloadsCount,
+    required this.historyCount,
+    required this.watchlistCount,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Row(
+        children: [
+          Expanded(
+            child: _QuickActionTile(
+              icon: Icons.favorite_rounded,
+              label: 'Favoritos',
+              badge: favoritesCount > 0 ? '$favoritesCount' : null,
+              onTap: () => context.go('/favorites'),
+            ),
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            child: _QuickActionTile(
+              icon: Icons.download_done_rounded,
+              label: 'Descargas',
+              badge: downloadsCount > 0 ? '$downloadsCount' : null,
+              onTap: () => context.go('/downloads'),
+            ),
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            child: _QuickActionTile(
+              icon: Icons.history_rounded,
+              label: 'Historial',
+              badge: historyCount > 0 ? '$historyCount' : null,
+              onTap: () => context.go('/history'),
+            ),
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            child: _QuickActionTile(
+              icon: Icons.bookmark_added_rounded,
+              label: 'Pendiente',
+              onTap: () => context.go('/watchlist'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _QuickActionTile extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String? badge;
+  final VoidCallback onTap;
+
+  const _QuickActionTile({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.badge,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: Column(
+          children: [
+            Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Container(
+                  width: 34,
+                  height: 34,
+                  decoration: BoxDecoration(
+                    color: AppColors.accent.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(9),
+                  ),
+                  child: Icon(icon, color: AppColors.accent2, size: 16),
+                ),
+                if (badge != null)
+                  Positioned(
+                    top: -4,
+                    right: -6,
+                    child: Container(
+                      padding:
+                          const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                      decoration: BoxDecoration(
+                        color: AppColors.error,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: AppColors.bg, width: 1.5),
+                      ),
+                      child: Text(
+                        badge!,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 8,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 9.5,
+                color: AppColors.textSecondary,
+                fontWeight: FontWeight.w700,
               ),
             ),
           ],
@@ -746,6 +1041,264 @@ class _AchievementTile extends StatelessWidget {
   }
 }
 
+// ── Stat card ────────────────────────────────────────────────────────────────
+
+class _StatCard extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String value;
+  final String? valueSuffix;
+  final Color color;
+  final Color iconBg;
+  final Color glow;
+  final String? trend;
+
+  const _StatCard({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.color,
+    required this.iconBg,
+    required this.glow,
+    this.valueSuffix,
+    this.trend,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Stack(
+        clipBehavior: Clip.hardEdge,
+        children: [
+          Positioned(
+            top: -20,
+            right: -20,
+            child: Container(
+              width: 70,
+              height: 70,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: RadialGradient(
+                  colors: [glow, Colors.transparent],
+                ),
+              ),
+            ),
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: iconBg,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(icon, color: color, size: 16),
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text.rich(
+                    TextSpan(children: [
+                      TextSpan(text: value),
+                      if (valueSuffix != null)
+                        TextSpan(
+                          text: valueSuffix,
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: AppColors.textSecondary,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                    ]),
+                    style: const TextStyle(
+                      fontSize: 26,
+                      fontWeight: FontWeight.w900,
+                      height: 1,
+                    ),
+                  ),
+                  const SizedBox(height: 5),
+                  Text(
+                    label.toUpperCase(),
+                    style: TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          if (trend != null)
+            Positioned(
+              top: 0,
+              right: 0,
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: AppColors.success.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(5),
+                ),
+                child: Text(
+                  trend!,
+                  style: TextStyle(
+                    color: AppColors.success,
+                    fontSize: 9,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Achievement tile ──────────────────────────────────────────────────────────
+
+class _AchievementTile extends StatelessWidget {
+  final _Achievement achievement;
+
+  const _AchievementTile({required this.achievement});
+
+  @override
+  Widget build(BuildContext context) {
+    final unlocked = achievement.unlocked;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(8, 12, 8, 8),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: unlocked
+              ? AppColors.accent2.withValues(alpha: 0.4)
+              : AppColors.border,
+        ),
+        boxShadow: unlocked
+            ? [
+                BoxShadow(
+                  color: AppColors.accent2.withValues(alpha: 0.15),
+                  blurRadius: 0,
+                  spreadRadius: 1,
+                ),
+              ]
+            : null,
+      ),
+      child: Stack(
+        fit: StackFit.expand,
+        clipBehavior: Clip.none,
+        children: [
+          Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: unlocked
+                      ? AppColors.accent2.withValues(alpha: 0.18)
+                      : AppColors.textSecondary.withValues(alpha: 0.1),
+                  boxShadow: unlocked
+                      ? [
+                          BoxShadow(
+                            color: AppColors.accent2.withValues(alpha: 0.25),
+                            blurRadius: 12,
+                            offset: const Offset(0, 4),
+                          ),
+                        ]
+                      : null,
+                ),
+                child: Icon(
+                  achievement.icon,
+                  color: unlocked
+                      ? AppColors.accent2
+                      : AppColors.textSecondary,
+                  size: 18,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                achievement.name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w900,
+                  color: unlocked
+                      ? AppColors.textPrimary
+                      : AppColors.textSecondary,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                achievement.description,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 8.5,
+                  color: AppColors.textSecondary,
+                  fontWeight: FontWeight.w600,
+                  height: 1.3,
+                ),
+              ),
+              if (!unlocked) ...[
+                const SizedBox(height: 6),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(2),
+                  child: LinearProgressIndicator(
+                    value: achievement.progress,
+                    minHeight: 3,
+                    backgroundColor: AppColors.border,
+                    valueColor: AlwaysStoppedAnimation(AppColors.accent2),
+                  ),
+                ),
+              ],
+            ],
+          ),
+          if (unlocked)
+            Positioned(
+              top: -4,
+              right: -4,
+              child: Container(
+                width: 16,
+                height: 16,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: AppColors.success,
+                  border: Border.all(color: AppColors.surface, width: 1.5),
+                ),
+                child: const Icon(
+                  Icons.check_rounded,
+                  size: 10,
+                  color: Colors.white,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Challenge card ────────────────────────────────────────────────────────────
+
 class _ChallengeCard extends StatelessWidget {
   final _WeeklyChallenge challenge;
 
@@ -754,11 +1307,11 @@ class _ChallengeCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(12),
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      padding: const EdgeInsets.all(13),
       decoration: BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(color: AppColors.border),
       ),
       child: Column(
@@ -766,13 +1319,13 @@ class _ChallengeCard extends StatelessWidget {
           Row(
             children: [
               Container(
-                width: 34,
-                height: 34,
+                width: 36,
+                height: 36,
                 decoration: BoxDecoration(
-                  color: challenge.color.withValues(alpha: 0.16),
-                  borderRadius: BorderRadius.circular(8),
+                  color: challenge.color.withValues(alpha: 0.18),
+                  borderRadius: BorderRadius.circular(10),
                 ),
-                child: Icon(challenge.icon, color: challenge.color, size: 19),
+                child: Icon(challenge.icon, color: challenge.color, size: 17),
               ),
               const SizedBox(width: 10),
               Expanded(
@@ -804,7 +1357,7 @@ class _ChallengeCard extends StatelessWidget {
               ),
               const SizedBox(width: 8),
               Text(
-                challenge.completed ? 'Listo' : '+${challenge.xp} XP',
+                challenge.completed ? 'Listo ✓' : '+${challenge.xp} XP',
                 style: TextStyle(
                   color: challenge.completed
                       ? AppColors.success
@@ -820,16 +1373,31 @@ class _ChallengeCard extends StatelessWidget {
             children: [
               Expanded(
                 child: ClipRRect(
-                  borderRadius: BorderRadius.circular(4),
-                  child: LinearProgressIndicator(
-                    value: challenge.percent,
-                    minHeight: 6,
-                    backgroundColor: AppColors.border,
-                    valueColor: AlwaysStoppedAnimation(
-                      challenge.completed
-                          ? AppColors.success
-                          : AppColors.accent2,
-                    ),
+                  borderRadius: BorderRadius.circular(3),
+                  child: Stack(
+                    children: [
+                      Container(height: 6, color: AppColors.border),
+                      FractionallySizedBox(
+                        widthFactor: challenge.percent,
+                        child: Container(
+                          height: 6,
+                          decoration: BoxDecoration(
+                            gradient: challenge.completed
+                                ? null
+                                : LinearGradient(
+                                    colors: [
+                                      AppColors.accent,
+                                      AppColors.accent2
+                                    ],
+                                  ),
+                            color: challenge.completed
+                                ? AppColors.success
+                                : null,
+                            borderRadius: BorderRadius.circular(3),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -862,63 +1430,88 @@ class _ChallengeCard extends StatelessWidget {
   }
 }
 
-class _SectionTitle extends StatelessWidget {
-  final String text;
+// ── Genre row ────────────────────────────────────────────────────────────────
 
-  const _SectionTitle(this.text);
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      text,
-      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w900),
-    );
-  }
-}
-
-class _GenreBar extends StatelessWidget {
+class _GenreRow extends StatelessWidget {
+  final int rank;
   final String name;
   final double percent;
 
-  const _GenreBar({required this.name, required this.percent});
+  const _GenreRow({
+    required this.rank,
+    required this.name,
+    required this.percent,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final safePercent = percent.clamp(0.0, 1.0);
+    final safe = percent.clamp(0.0, 1.0);
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
         children: [
-          SizedBox(
-            width: 68,
-            child: Text(
-              name,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800),
+          Container(
+            width: 22,
+            height: 22,
+            decoration: BoxDecoration(
+              color: AppColors.accent.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(6),
             ),
-          ),
-          Expanded(
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(3),
-              child: LinearProgressIndicator(
-                value: safePercent,
-                minHeight: 5,
-                backgroundColor: AppColors.border,
-                valueColor: AlwaysStoppedAnimation(AppColors.accent2),
+            child: Center(
+              child: Text(
+                '$rank',
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w900,
+                  color: AppColors.accent2,
+                ),
               ),
             ),
           ),
           const SizedBox(width: 10),
           SizedBox(
-            width: 28,
+            width: 80,
             child: Text(
-              '${(safePercent * 100).round()}%',
+              name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style:
+                  const TextStyle(fontSize: 11, fontWeight: FontWeight.w800),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(3),
+              child: Stack(
+                children: [
+                  Container(height: 6, color: AppColors.border),
+                  FractionallySizedBox(
+                    widthFactor: safe,
+                    child: Container(
+                      height: 6,
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [AppColors.accent, AppColors.accent2],
+                        ),
+                        borderRadius: BorderRadius.circular(3),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          SizedBox(
+            width: 36,
+            child: Text(
+              '${(safe * 100).round()}%',
               textAlign: TextAlign.right,
               style: TextStyle(
                 color: AppColors.textSecondary,
                 fontSize: 10,
-                fontWeight: FontWeight.w700,
+                fontWeight: FontWeight.w800,
               ),
             ),
           ),
@@ -928,94 +1521,216 @@ class _GenreBar extends StatelessWidget {
   }
 }
 
-class _ActivityGrid extends StatelessWidget {
+// ── Activity section ──────────────────────────────────────────────────────────
+
+class _ActivitySection extends StatelessWidget {
   final Map<DateTime, int> activity;
 
-  const _ActivityGrid({required this.activity});
+  const _ActivitySection({required this.activity});
 
   @override
   Widget build(BuildContext context) {
     final today = DateTime.now();
-    final start = DateTime(
-      today.year,
-      today.month,
-      today.day,
-    ).subtract(const Duration(days: 69));
-    return Wrap(
-      spacing: 4,
-      runSpacing: 4,
-      children: List.generate(70, (index) {
-        final day = start.add(Duration(days: index));
-        final count = activity[day] ?? 0;
-        final color = switch (count) {
-          0 => AppColors.surface2,
-          1 => AppColors.accent.withValues(alpha: 0.65),
-          2 || 3 => AppColors.accent2.withValues(alpha: 0.8),
-          _ => AppColors.accent2,
-        };
-        return Container(
-          width: 10,
-          height: 10,
-          decoration: BoxDecoration(
-            color: color,
-            borderRadius: BorderRadius.circular(3),
-          ),
-        );
-      }),
-    );
-  }
-}
+    final start = DateTime(today.year, today.month, today.day)
+        .subtract(const Duration(days: 69));
+    final months = _monthLabels(start, today);
 
-class _ActivityLegend extends StatelessWidget {
-  const _ActivityLegend();
-
-  @override
-  Widget build(BuildContext context) {
-    return Wrap(
-      spacing: 6,
-      runSpacing: 6,
-      children: [
-        _LegendPill(label: 'Ninguno', color: AppColors.surface2),
-        _LegendPill(label: 'Poco', color: AppColors.accent),
-        _LegendPill(label: 'Mucho', color: AppColors.accent2),
-      ],
-    );
-  }
-}
-
-class _LegendPill extends StatelessWidget {
-  final String label;
-  final Color color;
-
-  const _LegendPill({required this.label, required this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(7),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            width: 8,
-            height: 8,
-            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: months
+                .map((m) => Text(
+                      m,
+                      style: TextStyle(
+                        fontSize: 9,
+                        color: AppColors.textSecondary,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ))
+                .toList(),
           ),
-          const SizedBox(width: 7),
-          Text(
-            label,
-            style: TextStyle(
-              color: AppColors.textSecondary,
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-            ),
+          const SizedBox(height: 6),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              const cols = 10;
+              const gap = 4.0;
+              final cellSize =
+                  (constraints.maxWidth - gap * (cols - 1)) / cols;
+              return Wrap(
+                spacing: gap,
+                runSpacing: gap,
+                children: List.generate(70, (index) {
+                  final day = start.add(Duration(days: index));
+                  final count = activity[day] ?? 0;
+                  final color = switch (count) {
+                    0 => AppColors.surface2,
+                    1 => AppColors.accent.withValues(alpha: 0.4),
+                    2 || 3 => AppColors.accent2.withValues(alpha: 0.7),
+                    _ => AppColors.accent2,
+                  };
+                  return Container(
+                    width: cellSize,
+                    height: cellSize,
+                    decoration: BoxDecoration(
+                      color: color,
+                      borderRadius: BorderRadius.circular(3),
+                      boxShadow: count >= 4
+                          ? [
+                              BoxShadow(
+                                color:
+                                    AppColors.accent2.withValues(alpha: 0.5),
+                                blurRadius: 4,
+                              ),
+                            ]
+                          : null,
+                    ),
+                  );
+                }),
+              );
+            },
+          ),
+          const SizedBox(height: 10),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              Text(
+                'Menos',
+                style: TextStyle(
+                  fontSize: 9,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+              const SizedBox(width: 5),
+              ...[
+                AppColors.surface2,
+                AppColors.accent.withValues(alpha: 0.4),
+                AppColors.accent2.withValues(alpha: 0.7),
+                AppColors.accent2,
+              ].map((c) => Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 1.5),
+                    child: Container(
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        color: c,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  )),
+              const SizedBox(width: 5),
+              Text(
+                'Más',
+                style: TextStyle(
+                  fontSize: 9,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+            ],
           ),
         ],
+      ),
+    );
+  }
+
+  static List<String> _monthLabels(DateTime start, DateTime end) {
+    const monthNames = [
+      'Ene',
+      'Feb',
+      'Mar',
+      'Abr',
+      'May',
+      'Jun',
+      'Jul',
+      'Ago',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dic'
+    ];
+    final months = <int>{};
+    var cursor = DateTime(start.year, start.month);
+    while (!cursor.isAfter(end)) {
+      months.add(cursor.month - 1);
+      cursor = DateTime(cursor.year, cursor.month + 1);
+    }
+    return months.map((m) => monthNames[m]).toList();
+  }
+}
+
+// ── History card ──────────────────────────────────────────────────────────────
+
+class _HistoryCard extends StatelessWidget {
+  final int episodes;
+  final int series;
+  final VoidCallback onTap;
+
+  const _HistoryCard({
+    required this.episodes,
+    required this.series,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppColors.border),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: AppColors.accent.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(
+                  Icons.history_rounded,
+                  color: AppColors.accent2,
+                  size: 16,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Ver historial completo',
+                      style: TextStyle(
+                          fontSize: 12, fontWeight: FontWeight.w900),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '$episodes episodios · $series series',
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(
+                Icons.arrow_forward_ios_rounded,
+                color: AppColors.accent2,
+                size: 14,
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

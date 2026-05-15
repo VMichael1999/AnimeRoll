@@ -156,7 +156,7 @@ void main() {
     expect(await container.read(scheduleResultsProvider.future), hasLength(1));
 
     final servers = await container.read(serversProvider('episode-url').future);
-    expect(servers.first.name.toLowerCase(), contains('hls'));
+    expect(servers.first.name.toLowerCase(), contains('yourupload'));
     expect(servers.map((server) => server.url), isNot(contains('')));
   });
 

@@ -1,12 +1,13 @@
 // coverage:ignore-file
 import 'dart:async';
-import 'package:chewie/chewie.dart';
+import 'dart:io' show Platform;
+import 'package:better_player_plus/better_player_plus.dart';
 import 'package:floating/floating.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:video_player/video_player.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../shared/models/anime_model.dart';
@@ -15,6 +16,7 @@ import '../../../shared/widgets/app_toast.dart';
 import '../../../shared/widgets/error_view.dart';
 import '../../detail/data/detail_provider.dart';
 import '../../downloads/data/downloads_provider.dart';
+import '../../downloads/presentation/download_server_sheet.dart';
 import '../../favorites/data/favorites_provider.dart';
 import '../../history/data/watch_history_provider.dart';
 import '../../marathon/data/marathon_provider.dart';
@@ -40,11 +42,11 @@ class PlayerScreen extends ConsumerStatefulWidget {
 }
 
 class _PlayerScreenState extends ConsumerState<PlayerScreen> {
+  final GlobalKey _betterPlayerKey = GlobalKey();
   final _floating = Floating();
   Timer? _sleepTimer;
   Duration? _sleepTimerRemaining;
-  VideoPlayerController? _videoController;
-  ChewieController? _chewieController;
+  BetterPlayerController? _bpController;
   String? _activeVideoUrl;
   String? _initializingVideoUrl;
   String? _playerError;
@@ -59,24 +61,23 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   void dispose() {
     _sleepTimer?.cancel();
     _saveCurrentProgress(force: true);
-    _chewieController?.dispose();
-    _videoController?.removeListener(_onVideoProgress);
-    _videoController?.dispose();
+    _bpController?.removeEventsListener(_onPlayerEvent);
+    _bpController?.dispose();
     SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
     super.dispose();
   }
 
   Future<void> _initPlayer(VideoServerModel server) async {
-    final videoUrl = server.url;
+    final videoUrl = _playbackUrl(server.url);
     if (_initializingVideoUrl == videoUrl) return;
 
     _saveCurrentProgress(force: true);
     _resetMarathonTick();
-    _chewieController?.dispose();
-    final previousController = _videoController;
-    previousController?.removeListener(_onVideoProgress);
-    _videoController = null;
-    await previousController?.dispose();
+
+    final previousController = _bpController;
+    previousController?.removeEventsListener(_onPlayerEvent);
+    _bpController = null;
+    previousController?.dispose();
 
     _playerError = null;
     _activeVideoUrl = videoUrl;
@@ -84,32 +85,54 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
 
     try {
       final isHls = videoUrl.contains('.m3u8');
-      final controller = VideoPlayerController.networkUrl(
-        Uri.parse(videoUrl),
-        formatHint: isHls ? VideoFormat.hls : null,
+      final dataSource = BetterPlayerDataSource(
+        BetterPlayerDataSourceType.network,
+        videoUrl,
+        headers: const {
+          'Referer': 'https://animeav1.com/',
+          'Origin': 'https://animeav1.com',
+          'User-Agent':
+              'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15',
+        },
+        videoFormat: isHls ? BetterPlayerVideoFormat.hls : null,
       );
 
-      _videoController = controller;
-      await controller.initialize();
+      final controller = BetterPlayerController(
+        BetterPlayerConfiguration(
+          autoPlay: false,
+          fit: BoxFit.contain,
+          aspectRatio: 16 / 9,
+          allowedScreenSleep: false,
+          deviceOrientationsAfterFullScreen: const [
+            DeviceOrientation.portraitUp,
+          ],
+          placeholder: const ColoredBox(color: Colors.black),
+          controlsConfiguration: const BetterPlayerControlsConfiguration(
+            enablePip: true,
+            enableFullscreen: true,
+            enableMute: true,
+            enableSkips: false,
+            enableSubtitles: false,
+            enableQualities: false,
+            enableAudioTracks: false,
+            enablePlaybackSpeed: true,
+            enableProgressBar: true,
+            enableProgressText: true,
+            enablePlayPause: true,
+          ),
+        ),
+        betterPlayerDataSource: dataSource,
+      );
+
+      _bpController = controller;
+      controller.addEventsListener(_onPlayerEvent);
+
       if (!mounted || _activeVideoUrl != videoUrl) {
-        await controller.dispose();
-        if (_videoController == controller) _videoController = null;
+        controller.removeEventsListener(_onPlayerEvent);
+        controller.dispose();
+        if (_bpController == controller) _bpController = null;
         return;
       }
-      await _seekToSavedPosition(controller);
-      controller.addListener(_onVideoProgress);
-
-      _chewieController = ChewieController(
-        videoPlayerController: controller,
-        autoPlay: false,
-        allowFullScreen: true,
-        allowMuting: true,
-        showControlsOnInitialize: false,
-        deviceOrientationsAfterFullScreen: [DeviceOrientation.portraitUp],
-        placeholder: ColoredBox(color: Colors.black),
-      );
-      await ref.read(preferredPlaybackServerProvider.notifier).set(server.name);
-      _startPlaybackAfterFirstFrame(videoUrl);
     } catch (error) {
       _playerError = 'No se pudo reproducir este servidor';
       if (ref.read(fallbackPrefProvider)) {
@@ -124,13 +147,14 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     if (mounted) setState(() {});
   }
 
-  Future<void> _seekToSavedPosition(VideoPlayerController controller) async {
+  Future<void> _seekToSavedPosition(BetterPlayerController controller) async {
     final entry = ref
         .read(watchHistoryProvider.notifier)
         .find(widget.episodeUrl);
     if (entry == null || entry.completed) return;
     final position = Duration(milliseconds: entry.positionMs);
-    final duration = controller.value.duration;
+    final duration =
+        controller.videoPlayerController?.value.duration ?? Duration.zero;
     if (position < const Duration(seconds: 10) ||
         duration <= Duration.zero ||
         position >= duration - const Duration(seconds: 30)) {
@@ -139,25 +163,47 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     await controller.seekTo(position);
   }
 
-  void _onVideoProgress() {
-    final now = DateTime.now();
-    final last = _lastHistorySaveAt;
-    if (last != null && now.difference(last) < const Duration(seconds: 10)) {
-      return;
+  void _onPlayerEvent(BetterPlayerEvent event) {
+    switch (event.betterPlayerEventType) {
+      case BetterPlayerEventType.initialized:
+        final controller = _bpController;
+        if (controller != null) {
+          unawaited(_seekToSavedPosition(controller));
+          unawaited(controller.play());
+        }
+        break;
+      case BetterPlayerEventType.exception:
+        _playerError = 'No se pudo reproducir este servidor';
+        final url = _activeVideoUrl;
+        if (url != null && ref.read(fallbackPrefProvider)) {
+          _tryNextServer(url);
+        }
+        if (mounted) setState(() {});
+        break;
+      case BetterPlayerEventType.progress:
+        final now = DateTime.now();
+        final last = _lastHistorySaveAt;
+        if (last != null &&
+            now.difference(last) < const Duration(seconds: 10)) {
+          return;
+        }
+        _lastHistorySaveAt = now;
+        _saveCurrentProgress();
+        _recordMarathonTick();
+        break;
+      default:
+        break;
     }
-    _lastHistorySaveAt = now;
-    _saveCurrentProgress();
-    _recordMarathonTick();
   }
 
   void _recordMarathonTick() {
-    final controller = _videoController;
-    if (controller == null ||
-        !controller.value.isInitialized ||
-        !controller.value.isPlaying) {
+    final video = _bpController?.videoPlayerController;
+    if (video == null ||
+        !video.value.initialized ||
+        !video.value.isPlaying) {
       return;
     }
-    final position = controller.value.position;
+    final position = video.value.position;
     final key = widget.episodeUrl;
     final previous = _lastMarathonEpisodeKey == key
         ? _lastMarathonPosition
@@ -186,7 +232,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       builder: (_) => _MarathonBreakDialog(
         session: session,
         onTakeBreak: () {
-          _videoController?.pause();
+          _bpController?.pause();
           Navigator.of(context).pop();
         },
         onContinue: () => Navigator.of(context).pop(),
@@ -195,11 +241,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   }
 
   void _saveCurrentProgress({bool force = false}) {
-    final controller = _videoController;
-    if (controller == null || !controller.value.isInitialized) return;
+    final video = _bpController?.videoPlayerController;
+    if (video == null || !video.value.initialized) return;
     if (!force &&
-        controller.value.position < const Duration(seconds: 5) &&
-        controller.value.duration > const Duration(minutes: 1)) {
+        video.value.position < const Duration(seconds: 5) &&
+        video.value.duration != null &&
+        video.value.duration! > const Duration(minutes: 1)) {
       return;
     }
 
@@ -220,56 +267,128 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
             animeUrl: animeUrl,
             thumbnail: episode?.thumbnail ?? detail?.anime.cover,
             episodeNumber: episode?.number,
-            position: controller.value.position,
-            duration: controller.value.duration,
+            position: video.value.position,
+            duration: video.value.duration ?? Duration.zero,
             source: 'stream',
           ),
     );
   }
 
-  void _startPlaybackAfterFirstFrame(String videoUrl) {
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      await Future<void>.delayed(const Duration(milliseconds: 120));
-      if (!mounted || _activeVideoUrl != videoUrl) return;
-      final controller = _videoController;
-      if (controller == null || !controller.value.isInitialized) return;
-      await controller.play();
-    });
-  }
-
   void _tryNextServer(String failedUrl) {
     final current = _lastServers.indexWhere(
-      (server) => server.url == failedUrl,
+      (server) => _playbackUrl(server.url) == failedUrl,
     );
     if (current == -1) return;
 
     for (var i = current + 1; i < _lastServers.length; i++) {
       if (_isDirectVideoUrl(_lastServers[i].url)) {
         ref.read(selectedServerProvider.notifier).state = i;
+        ref.read(selectedServerUrlProvider.notifier).state = _playbackUrl(
+          _lastServers[i].url,
+        );
         return;
       }
     }
 
     for (var i = 0; i < _lastServers.length; i++) {
-      if (_lastServers[i].url != failedUrl) {
+      if (_playbackUrl(_lastServers[i].url) != failedUrl) {
         ref.read(selectedServerProvider.notifier).state = i;
+        ref.read(selectedServerUrlProvider.notifier).state = _playbackUrl(
+          _lastServers[i].url,
+        );
         return;
       }
     }
   }
 
   bool _isDirectVideoUrl(String url) {
-    final lower = url.toLowerCase();
+    final lower = _playbackUrl(url).toLowerCase();
+    final isApplePlatform =
+        defaultTargetPlatform == TargetPlatform.iOS ||
+        defaultTargetPlatform == TargetPlatform.macOS;
+    // Player pages from zilla-networks return HTML, not a real .m3u8.
+    // iOS AVPlayer can't resolve them — fall back to the WebView embed.
+    if (isApplePlatform &&
+        (lower.contains('player.zilla-networks.com') ||
+            lower.contains('zilla-networks.com/m3u8') ||
+            lower.contains('player.zilla'))) {
+      return false;
+    }
+    if (isApplePlatform) {
+      return lower.contains('.m3u8') ||
+          lower.contains('.mp4') ||
+          lower.contains('.mov');
+    }
     return lower.contains('.m3u8') ||
         lower.contains('.mp4') ||
         lower.contains('.webm') ||
-        lower.contains('.mkv');
+        lower.contains('.mkv') ||
+        lower.contains('.mov');
   }
 
   Future<void> _enterPiP() async {
-    final available = await _floating.isPipAvailable;
-    if (!available || !mounted) return;
-    await _floating.enable(const ImmediatePiP(aspectRatio: Rational(16, 9)));
+    // Android: use the `floating` package (native PictureInPictureMode). It's
+    // simpler, reliable, and doesn't pull the player into fullscreen first.
+    if (Platform.isAndroid) {
+      try {
+        final available = await _floating.isPipAvailable;
+        if (!mounted) return;
+        if (!available) {
+          AppToast.show(
+            context,
+            message: 'PiP no soportado en este dispositivo',
+            type: AppToastType.error,
+          );
+          return;
+        }
+        await _floating.enable(
+          const ImmediatePiP(aspectRatio: Rational(16, 9)),
+        );
+      } catch (_) {
+        if (mounted) {
+          AppToast.show(
+            context,
+            message: 'No se pudo activar PiP',
+            type: AppToastType.error,
+          );
+        }
+      }
+      return;
+    }
+
+    // iOS: use BetterPlayer's PiP (it wraps AVPictureInPictureController).
+    final controller = _bpController;
+    if (controller == null || !mounted) return;
+    final video = controller.videoPlayerController;
+    if (video == null || !video.value.initialized) {
+      AppToast.show(
+        context,
+        message: 'Espera a que el video cargue',
+        type: AppToastType.info,
+      );
+      return;
+    }
+    try {
+      final supported = await controller.isPictureInPictureSupported();
+      if (!mounted) return;
+      if (!supported) {
+        AppToast.show(
+          context,
+          message: 'PiP no soportado en este dispositivo',
+          type: AppToastType.error,
+        );
+        return;
+      }
+      await controller.enablePictureInPicture(_betterPlayerKey);
+    } catch (_) {
+      if (mounted) {
+        AppToast.show(
+          context,
+          message: 'No se pudo activar PiP',
+          type: AppToastType.error,
+        );
+      }
+    }
   }
 
   void _setSleepTimer(Duration duration) {
@@ -279,7 +398,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       final remaining = _sleepTimerRemaining;
       if (remaining == null || remaining.inSeconds <= 1) {
         timer.cancel();
-        _videoController?.pause();
+        _bpController?.pause();
         if (mounted) setState(() => _sleepTimerRemaining = null);
         return;
       }
@@ -303,17 +422,37 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   }
 
   Widget _embedPlayer(String url) {
+    // Use the original embed URL (NOT the rewritten /m3u8/<id> variant) so the
+    // player page can run its own JS and resolve the real stream internally.
     final controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setBackgroundColor(Colors.black)
       ..loadRequest(Uri.parse(url));
 
     return WebViewWidget(controller: controller);
+  }
+
+  String _playbackUrl(String url) {
+    final uri = Uri.tryParse(url);
+    if (uri == null) return url;
+    final host = uri.host.replaceFirst(RegExp(r'^www\.'), '').toLowerCase();
+    if (host.contains('zilla-networks.com') && uri.pathSegments.isNotEmpty) {
+      final playIndex = uri.pathSegments.indexWhere(
+        (segment) => segment.toLowerCase() == 'play',
+      );
+      if (playIndex != -1 && playIndex + 1 < uri.pathSegments.length) {
+        final videoId = uri.pathSegments[playIndex + 1];
+        return 'https://player.zilla-networks.com/m3u8/$videoId';
+      }
+    }
+    return url;
   }
 
   @override
   Widget build(BuildContext context) {
     final serversAsync = ref.watch(serversProvider(widget.episodeUrl));
     final selectedIndex = ref.watch(selectedServerProvider);
+    final selectedServerUrl = ref.watch(selectedServerUrlProvider);
     final marathon = ref.watch(marathonProvider);
 
     ref.listen<MarathonSession>(marathonProvider, (prev, next) {
@@ -349,12 +488,21 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                 ),
               );
             }
-            final server = servers[selectedIndex.clamp(0, servers.length - 1)];
+            final selectedUrlIndex = selectedServerUrl == null
+                ? -1
+                : servers.indexWhere(
+                    (server) => _playbackUrl(server.url) == selectedServerUrl,
+                  );
+            final effectiveIndex = selectedUrlIndex == -1
+                ? selectedIndex.clamp(0, servers.length - 1)
+                : selectedUrlIndex;
+            final server = servers[effectiveIndex];
+            final playbackUrl = _playbackUrl(server.url);
             if (!_isDirectVideoUrl(server.url)) {
               return _embedPlayer(server.url);
             }
-            if (_chewieController == null || _activeVideoUrl != server.url) {
-              if (_initializingVideoUrl != server.url) {
+            if (_bpController == null || _activeVideoUrl != playbackUrl) {
+              if (_initializingVideoUrl != playbackUrl) {
                 WidgetsBinding.instance.addPostFrameCallback((_) {
                   _initPlayer(server);
                 });
@@ -371,7 +519,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                 child: CircularProgressIndicator(color: Colors.white),
               );
             }
-            return Chewie(controller: _chewieController!);
+            return BetterPlayer(
+              key: _betterPlayerKey,
+              controller: _bpController!,
+            );
           },
           loading: () => const Center(
             child: CircularProgressIndicator(color: Colors.white),
@@ -386,84 +537,71 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       ),
     );
 
-    return PopScope(
-      canPop: false,
-      onPopInvokedWithResult: (didPop, _) async {
-        if (didPop) return;
-        final router = GoRouter.of(context);
-        final available = await _floating.isPipAvailable;
-        if (available && mounted) {
-          await _floating.enable(
-            const ImmediatePiP(aspectRatio: Rational(16, 9)),
-          );
-        } else {
-          router.pop();
-        }
-      },
-      child: PiPSwitcher(
-        childWhenEnabled: ColoredBox(
-          color: Colors.black,
-          child: Center(child: videoArea),
-        ),
-        childWhenDisabled: Scaffold(
-          backgroundColor: Colors.black,
-          body: Column(
-            children: [
-              videoArea,
-              Expanded(
-                child: Container(
-                  color: AppColors.bg,
-                  child: serversAsync.when(
-                    data: (servers) => _PlayerInfo(
-                      title: widget.title,
-                      episodeUrl: widget.episodeUrl,
-                      animeUrl: animeUrl,
-                      servers: servers,
-                      selectedIndex: selectedIndex,
-                      detailAsync: detailAsync,
-                      onPiP: _enterPiP,
-                      sleepTimerRemaining: _sleepTimerRemaining,
-                      onSetSleepTimer: _setSleepTimer,
-                      onCancelSleepTimer: _cancelSleepTimer,
-                      formatSleepTimer: _formatSleepTimer,
-                      marathon: marathon,
-                      onResetMarathon: () =>
-                          ref.read(marathonProvider.notifier).reset(),
-                      onServerSelect: (i) {
-                        ref
-                            .read(preferredPlaybackServerProvider.notifier)
-                            .set(servers[i].name);
-                        ref.read(selectedServerProvider.notifier).state = i;
-                        _resetMarathonTick();
-                        _chewieController?.dispose();
-                        final controller = _videoController;
-                        _saveCurrentProgress(force: true);
-                        _chewieController = null;
-                        _videoController = null;
-                        _activeVideoUrl = null;
-                        _initializingVideoUrl = null;
-                        _playerError = null;
-                        controller?.removeListener(_onVideoProgress);
-                        controller?.dispose();
-                        if (_isDirectVideoUrl(servers[i].url)) {
-                          _initPlayer(servers[i]);
-                        } else {
-                          setState(() {});
-                        }
-                      },
-                    ),
-                    loading: () => const SizedBox.shrink(),
-                    error: (e, _) => ErrorView(
-                      message: 'Error al cargar servidores',
-                      onRetry: () =>
-                          ref.invalidate(serversProvider(widget.episodeUrl)),
-                    ),
-                  ),
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: Column(
+        children: [
+          videoArea,
+          Expanded(
+            child: Container(
+              color: AppColors.bg,
+              child: serversAsync.when(
+                data: (servers) => _PlayerInfo(
+                  title: widget.title,
+                  episodeUrl: widget.episodeUrl,
+                  animeUrl: animeUrl,
+                  servers: servers,
+                  selectedIndex: selectedServerUrl == null
+                      ? selectedIndex.clamp(0, servers.length - 1)
+                      : servers
+                            .indexWhere(
+                              (server) =>
+                                  _playbackUrl(server.url) ==
+                                  selectedServerUrl,
+                            )
+                            .clamp(0, servers.length - 1),
+                  detailAsync: detailAsync,
+                  onPiP: _enterPiP,
+                  sleepTimerRemaining: _sleepTimerRemaining,
+                  onSetSleepTimer: _setSleepTimer,
+                  onCancelSleepTimer: _cancelSleepTimer,
+                  formatSleepTimer: _formatSleepTimer,
+                  marathon: marathon,
+                  onResetMarathon: () =>
+                      ref.read(marathonProvider.notifier).reset(),
+                  onServerSelect: (i) {
+                    ref
+                        .read(preferredPlaybackServerProvider.notifier)
+                        .set(servers[i].name);
+                    ref.read(selectedServerProvider.notifier).state = i;
+                    ref.read(selectedServerUrlProvider.notifier).state =
+                        _playbackUrl(servers[i].url);
+                    _resetMarathonTick();
+                    _saveCurrentProgress(force: true);
+                    final controller = _bpController;
+                    _bpController = null;
+                    _activeVideoUrl = null;
+                    _initializingVideoUrl = null;
+                    _playerError = null;
+                    controller?.removeEventsListener(_onPlayerEvent);
+                    controller?.dispose();
+                    if (_isDirectVideoUrl(servers[i].url)) {
+                      _initPlayer(servers[i]);
+                    } else {
+                      setState(() {});
+                    }
+                  },
+                ),
+                loading: () => const SizedBox.shrink(),
+                error: (e, _) => ErrorView(
+                  message: 'Error al cargar servidores',
+                  onRetry: () =>
+                      ref.invalidate(serversProvider(widget.episodeUrl)),
                 ),
               ),
-            ],
+            ),
           ),
-        ),
+        ],
       ),
     );
   }
@@ -598,6 +736,24 @@ class _PlayerInfo extends ConsumerWidget {
         .where((item) => item.url == episodeUrl)
         .firstOrNull;
 
+    final isHentaila = animeUrl.contains('hentaila.com');
+    final preferredServer = await showDownloadServerSheet(
+      context: context,
+      ref: ref,
+      episodeUrl: episodeUrl,
+      subtitle: anime == null
+          ? title
+          : '${anime.title} · ${episode?.title ?? title}',
+    );
+    if (preferredServer == null) return; // user cancelled
+    if (!context.mounted) return;
+
+    // Hentaila ships per-episode stills as thumbnails. Prefer the anime cover
+    // so the saved download shows the poster instead of a scene.
+    final thumbnail = isHentaila
+        ? (anime?.cover ?? episode?.thumbnail)
+        : (episode?.thumbnail ?? anime?.cover);
+
     try {
       await ref
           .read(downloadsProvider.notifier)
@@ -606,16 +762,14 @@ class _PlayerInfo extends ConsumerWidget {
             title: anime == null
                 ? title
                 : '${anime.title} · ${episode?.title ?? title}',
-            thumbnail: episode?.thumbnail ?? anime?.cover,
+            thumbnail: thumbnail,
             animeTitle: anime?.title,
             animeUrl: anime?.url ?? animeUrl,
             episodeTitle: episode?.title ?? title,
             episodeNumber: episode?.number,
             quality: ref.read(qualityPrefProvider),
             variant: ref.read(variantPrefProvider),
-            preferredServer: animeUrl.contains('hentaila.com')
-                ? 'VIP'
-                : 'yourupload',
+            preferredServer: preferredServer,
           );
       if (context.mounted) {
         AppToast.show(

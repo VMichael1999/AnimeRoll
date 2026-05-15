@@ -9,6 +9,7 @@ import '../../../shared/widgets/app_toast.dart';
 import '../../../shared/widgets/error_view.dart';
 import '../data/detail_provider.dart';
 import '../../downloads/data/downloads_provider.dart';
+import '../../downloads/presentation/download_server_sheet.dart';
 import '../../favorites/data/favorites_provider.dart';
 import '../../settings/data/settings_provider.dart';
 
@@ -600,22 +601,38 @@ class _EpisodeList extends ConsumerWidget {
     WidgetRef ref,
     EpisodeModel episode,
   ) async {
+    // Always let the user pick the server (and surface a recommended one) so
+    // the flow is consistent across providers, including hentaila.
+    final preferredServer = await showDownloadServerSheet(
+      context: context,
+      ref: ref,
+      episodeUrl: episode.url,
+      subtitle: '$animeTitle · ${episode.title}',
+    );
+    if (preferredServer == null) return; // user cancelled
+
+    // Hentaila's episode thumbnails are stills from the chapter, not the
+    // anime cover. Always prefer the anime cover so the saved album shows the
+    // poster instead of a scene from the episode.
+    final isHentaila = animeUrl.contains('hentaila.com');
+    final thumbnail = isHentaila
+        ? (fallbackThumbnail ?? episode.thumbnail)
+        : (episode.thumbnail ?? fallbackThumbnail);
+
     try {
       await ref
           .read(downloadsProvider.notifier)
           .startEpisode(
             episodeUrl: episode.url,
             title: '$animeTitle · ${episode.title}',
-            thumbnail: episode.thumbnail ?? fallbackThumbnail,
+            thumbnail: thumbnail,
             animeTitle: animeTitle,
             animeUrl: animeUrl,
             episodeTitle: episode.title,
             episodeNumber: episode.number,
             quality: ref.read(qualityPrefProvider),
             variant: ref.read(variantPrefProvider),
-            preferredServer: animeUrl.contains('hentaila.com')
-                ? 'VIP'
-                : 'yourupload',
+            preferredServer: preferredServer,
           );
       if (context.mounted) {
         AppToast.show(

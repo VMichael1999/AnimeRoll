@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_app_icon_changer/flutter_app_icon_changer.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/constants/app_constants.dart';
@@ -39,8 +40,40 @@ class PersistedSettingNotifier<T> extends StateNotifier<T> {
   }
 }
 
+class _AnimeRollIcon extends AppIcon {
+  _AnimeRollIcon({
+    required super.iOSIcon,
+    required super.androidIcon,
+    required super.isDefaultIcon,
+  });
+}
+
 class AppIconStyleNotifier extends PersistedSettingNotifier<String> {
-  static const _channel = MethodChannel('anime_roll/app_icon');
+  static const _androidChannel = MethodChannel('anime_roll/app_icon');
+  static final _iosChanger = FlutterAppIconChangerPlugin(
+    iconsSet: [
+      _AnimeRollIcon(
+        iOSIcon: 'AppIcon',
+        androidIcon: 'MainActivity',
+        isDefaultIcon: true,
+      ),
+      _AnimeRollIcon(
+        iOSIcon: 'AppIcon1',
+        androidIcon: 'MainActivityOceano',
+        isDefaultIcon: false,
+      ),
+      _AnimeRollIcon(
+        iOSIcon: 'AppIcon2',
+        androidIcon: 'MainActivityCarmesi',
+        isDefaultIcon: false,
+      ),
+      _AnimeRollIcon(
+        iOSIcon: 'AppIcon3',
+        androidIcon: 'MainActivityEsmeralda',
+        isDefaultIcon: false,
+      ),
+    ],
+  );
 
   AppIconStyleNotifier() : super(key: 'appIconStyle', defaultValue: 'violeta');
 
@@ -56,13 +89,27 @@ class AppIconStyleNotifier extends PersistedSettingNotifier<String> {
   @override
   Future<void> set(String value) async {
     await super.set(value);
-    if (defaultTargetPlatform != TargetPlatform.android) return;
-    try {
-      await _channel.invokeMethod<bool>('setIconStyle', {'style': value});
-    } on PlatformException {
-      // The visual preference still applies even if the launcher rejects a swap.
-    } on MissingPluginException {
-      // Keeps settings usable on platforms without the native icon bridge.
+    final platform = defaultTargetPlatform;
+    if (platform == TargetPlatform.android) {
+      try {
+        await _androidChannel.invokeMethod<bool>('setIconStyle', {'style': value});
+      } on PlatformException {
+        // Visual preference still applies if the launcher rejects the swap.
+      } on MissingPluginException {
+        // Keeps settings usable on platforms without the native bridge.
+      }
+    } else if (platform == TargetPlatform.iOS) {
+      final iconName = switch (value) {
+        'oceano' => 'AppIcon1',
+        'carmesi' => 'AppIcon2',
+        'esmeralda' => 'AppIcon3',
+        _ => 'AppIcon',
+      };
+      try {
+        await _iosChanger.changeIcon(iconName);
+      } on PlatformException {
+        // Ignore: keeps the persisted preference even if iOS rejects.
+      }
     }
   }
 }

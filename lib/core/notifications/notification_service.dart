@@ -16,9 +16,13 @@ class NotificationService {
     if (_ready) return;
     tz.initializeTimeZones();
     const androidSettings = AndroidInitializationSettings(
-      'animeroll_notification_icon',
+      'animeroll_icon_violeta',
     );
-    const settings = InitializationSettings(android: androidSettings);
+    const iosSettings = DarwinInitializationSettings();
+    const settings = InitializationSettings(
+      android: androidSettings,
+      iOS: iosSettings,
+    );
     await _plugin.initialize(settings: settings);
     _ready = true;
   }

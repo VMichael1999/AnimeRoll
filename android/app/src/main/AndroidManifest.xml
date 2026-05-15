@@ -6,14 +6,16 @@
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>
 
     <application
-        android:label="anime_roll"
+        android:label="AnimeRoll"
         android:name="${applicationName}"
         android:icon="@mipmap/animeroll_icon_violeta"
         android:enableOnBackInvokedCallback="true"
         android:usesCleartextTraffic="true">
         <activity
             android:name=".MainActivity"
-            android:exported="false"
+            android:exported="true"
+            android:icon="@mipmap/animeroll_icon_violeta"
+            android:label="AnimeRoll"
             android:launchMode="singleTop"
             android:taskAffinity=""
             android:theme="@style/LaunchTheme"
@@ -29,19 +31,11 @@
               android:name="io.flutter.embedding.android.NormalTheme"
               android:resource="@style/NormalTheme"
               />
-        </activity>
-        <activity-alias
-            android:name=".MainActivityVioleta"
-            android:enabled="true"
-            android:exported="true"
-            android:icon="@mipmap/animeroll_icon_violeta"
-            android:label="AnimeRoll"
-            android:targetActivity=".MainActivity">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
-        </activity-alias>
+        </activity>
         <activity-alias
             android:name=".MainActivityOceano"
             android:enabled="false"

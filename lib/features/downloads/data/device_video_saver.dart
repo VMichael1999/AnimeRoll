@@ -40,16 +40,8 @@ class DeviceVideoSaver {
     );
     onProgress(100);
 
-    if (Platform.isAndroid) {
-      final savedPath = await _channel.invokeMethod<String>('saveVideo', {
-        'sourcePath': tempPath,
-        'displayName': fileName,
-        'mimeType': _mimeType(fileName),
-      });
-      await File(tempPath).delete().catchError((_) => File(tempPath));
-      return savedPath ?? 'Movies/AnimeRoll/$fileName';
-    }
-
+    // Always store inside the app sandbox so the video never shows up in the
+    // user's Files / Gallery and gets cleaned up when the app is uninstalled.
     final documents = await getApplicationDocumentsDirectory();
     final localPath = '${documents.path}${Platform.pathSeparator}$fileName';
     await File(tempPath).copy(localPath);
@@ -168,12 +160,5 @@ class DeviceVideoSaver {
         .trim();
     final base = safe.isEmpty ? 'AnimeRoll video' : safe;
     return '$base.mp4';
-  }
-
-  String _mimeType(String fileName) {
-    final lower = fileName.toLowerCase();
-    if (lower.endsWith('.mkv')) return 'video/x-matroska';
-    if (lower.endsWith('.webm')) return 'video/webm';
-    return 'video/mp4';
   }
 }

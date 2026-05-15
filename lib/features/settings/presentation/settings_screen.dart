@@ -11,7 +11,6 @@ class SettingsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final themeRevision = ref.watch(accentColorIndexProvider);
-    final activeProvider = ref.watch(providerPrefProvider);
     final preferredServer = ref.watch(preferredPlaybackServerProvider);
     return Scaffold(
       key: ValueKey('settings-$themeRevision'),
@@ -54,14 +53,8 @@ class SettingsScreen extends ConsumerWidget {
                 _PickerRow(
                   icon: Icons.dns_rounded,
                   label: 'Servidor preferido',
-                  value: activeProvider == 'hentaila.com'
-                      ? 'VIP'
-                      : preferredServer.isEmpty
-                      ? 'Auto'
-                      : preferredServer,
-                  onTap: () => ref
-                      .read(preferredPlaybackServerProvider.notifier)
-                      .set(''),
+                  value: preferredServer.isEmpty ? 'Auto' : preferredServer,
+                  onTap: () => _showPreferredServerPicker(context, ref),
                 ),
                 _PickerRow(
                   icon: Icons.high_quality_rounded,
@@ -242,6 +235,84 @@ class SettingsScreen extends ConsumerWidget {
           const SizedBox(height: 8),
         ],
       ),
+    );
+  }
+
+  void _showPreferredServerPicker(BuildContext context, WidgetRef ref) {
+    const servers = [
+      ('', 'Auto', 'Respeta el orden del proveedor'),
+      ('HLS', 'HLS', 'Stream nativo cuando esté disponible'),
+      ('VIP', 'VIP', 'Servidor VIP si el proveedor lo ofrece'),
+      ('YourUpload', 'YourUpload', 'Servidor alternativo'),
+      ('Streamwish', 'Streamwish', 'Servidor alternativo'),
+      ('Filemoon', 'Filemoon', 'Servidor alternativo'),
+      ('MP4Upload', 'MP4Upload', 'Servidor alternativo'),
+      ('VOE', 'VOE', 'Servidor alternativo'),
+      ('Mega', 'Mega', 'Servidor alternativo'),
+    ];
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (_) {
+        final selected = ref.watch(preferredPlaybackServerProvider);
+        return SafeArea(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.sizeOf(context).height * 0.72,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Text(
+                    'Servidor preferido',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                ),
+                Flexible(
+                  child: ListView(
+                    shrinkWrap: true,
+                    children: [
+                      for (final server in servers)
+                        ListTile(
+                          title: Text(
+                            server.$2,
+                            style: const TextStyle(fontSize: 13),
+                          ),
+                          subtitle: Text(
+                            server.$3,
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: AppColors.textSecondary,
+                            ),
+                          ),
+                          trailing: selected == server.$1
+                              ? Icon(
+                                  Icons.check_rounded,
+                                  color: AppColors.accent2,
+                                )
+                              : null,
+                          onTap: () {
+                            ref
+                                .read(preferredPlaybackServerProvider.notifier)
+                                .set(server.$1);
+                            Navigator.pop(context);
+                          },
+                        ),
+                      const SizedBox(height: 8),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 

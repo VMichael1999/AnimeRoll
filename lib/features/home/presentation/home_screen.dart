@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -6,7 +8,6 @@ import '../../../core/theme/app_theme.dart';
 import '../../../shared/models/anime_model.dart';
 import '../../../shared/models/download_model.dart';
 import '../../../shared/widgets/anime_card.dart';
-import '../../../shared/widgets/section_header.dart';
 import '../../../shared/widgets/wide_card.dart';
 import '../../downloads/data/downloads_provider.dart';
 import '../../favorites/data/favorites_provider.dart';
@@ -77,7 +78,15 @@ class HomeScreen extends ConsumerWidget {
     return Scaffold(
       body: CustomScrollView(
         slivers: [
-          _HeroSliver(anime: mainList.valueOrNull?.firstOrNull),
+          const SliverToBoxAdapter(child: _TopBar()),
+          SliverToBoxAdapter(
+            child: mainList.when(
+              data: (list) =>
+                  _OverlappedCarousel(items: list.take(5).toList()),
+              loading: () => const SizedBox(height: 260),
+              error: (err, _) => const SizedBox(height: 260),
+            ),
+          ),
           const SliverToBoxAdapter(child: SizedBox(height: 12)),
           SliverToBoxAdapter(child: _SearchBar()),
           const SliverToBoxAdapter(child: SizedBox(height: 12)),
@@ -108,8 +117,16 @@ class HomeScreen extends ConsumerWidget {
               error: (err, _) => const SizedBox.shrink(),
             ),
           ),
+          if (selectedGenre == 'Todo')
+            SliverToBoxAdapter(
+              child: mainList.when(
+                data: (list) => _Top10Section(list: list),
+                loading: () => const SizedBox.shrink(),
+                error: (err, _) => const SizedBox.shrink(),
+              ),
+            ),
           if (selectedGenre == 'Todo') ...[
-            const SliverToBoxAdapter(child: SizedBox(height: 20)),
+            const SliverToBoxAdapter(child: SizedBox(height: 4)),
             SliverToBoxAdapter(
               child: latest.when(
                 data: (list) => _AnimeRow(
@@ -131,51 +148,49 @@ class HomeScreen extends ConsumerWidget {
   }
 }
 
-// ── Hero ──────────────────────────────────────────────────────────────────────
+// ── Top bar ───────────────────────────────────────────────────────────────────
 
-class _HeroSliver extends StatelessWidget {
-  final AnimeModel? anime;
-  const _HeroSliver({this.anime});
+class _TopBar extends StatelessWidget {
+  const _TopBar();
 
   @override
   Widget build(BuildContext context) {
-    return SliverAppBar(
-      expandedHeight: 220,
-      pinned: false,
-      stretch: true,
-      backgroundColor: AppColors.bg,
-      flexibleSpace: FlexibleSpaceBar(
-        stretchModes: const [StretchMode.zoomBackground],
-        background: Stack(
-          fit: StackFit.expand,
+    return SafeArea(
+      bottom: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 10, 8, 0),
+        child: Row(
           children: [
-            if (anime?.cover != null)
-              CachedNetworkImage(
-                imageUrl: anime!.cover!,
-                fit: BoxFit.cover,
-                placeholder: (context, _) =>
-                    ColoredBox(color: AppColors.surface2),
-                errorWidget: (context, url, _) =>
-                    ColoredBox(color: AppColors.surface2),
-              )
-            else
-              ColoredBox(color: AppColors.surface2),
-            Container(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [Colors.black.withValues(alpha: 0.15), AppColors.bg],
-                ),
+            RichText(
+              text: TextSpan(
+                children: [
+                  TextSpan(
+                    text: 'Anime',
+                    style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w900,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                  TextSpan(
+                    text: 'Roll',
+                    style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w900,
+                      color: AppColors.accent2,
+                    ),
+                  ),
+                ],
               ),
             ),
-            if (anime != null)
-              Positioned(
-                bottom: 16,
-                left: 16,
-                right: 16,
-                child: _HeroInfo(anime: anime!),
+            const Spacer(),
+            IconButton(
+              onPressed: () {},
+              icon: Icon(
+                Icons.notifications_outlined,
+                color: AppColors.textSecondary,
               ),
+            ),
           ],
         ),
       ),
@@ -183,65 +198,327 @@ class _HeroSliver extends StatelessWidget {
   }
 }
 
-class _HeroInfo extends StatelessWidget {
-  final AnimeModel anime;
-  const _HeroInfo({required this.anime});
+// ── Overlapped carousel ───────────────────────────────────────────────────────
+
+class _OverlappedCarousel extends StatefulWidget {
+  final List<AnimeModel> items;
+  const _OverlappedCarousel({required this.items});
+
+  @override
+  State<_OverlappedCarousel> createState() => _OverlappedCarouselState();
+}
+
+class _OverlappedCarouselState extends State<_OverlappedCarousel> {
+  int _current = 0;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _startTimer();
+  }
+
+  void _startTimer() {
+    _timer?.cancel();
+    _timer = Timer.periodic(const Duration(seconds: 6), (_) {
+      if (!mounted || widget.items.length <= 1) return;
+      setState(() => _current = (_current + 1) % widget.items.length);
+    });
+  }
+
+  void _goTo(int idx) {
+    setState(() => _current = idx);
+    _startTimer();
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-          decoration: BoxDecoration(
-            color: AppColors.accent,
-            borderRadius: BorderRadius.circular(4),
-          ),
-          child: const Text(
-            'TENDENCIA #1',
-            style: TextStyle(
-              fontSize: 9,
-              fontWeight: FontWeight.w700,
-              color: Colors.white,
-            ),
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          anime.title,
-          style: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.w800,
-            shadows: [Shadow(blurRadius: 8)],
-          ),
-          maxLines: 2,
-        ),
-        if (anime.genres.isNotEmpty)
-          Text(
-            '${anime.genres.take(3).join(' · ')}${anime.year != null ? ' · ${anime.year}' : ''}',
-            style: TextStyle(fontSize: 10, color: AppColors.textSecondary),
-          ),
-        const SizedBox(height: 8),
-        Row(
+    if (widget.items.isEmpty) return const SizedBox(height: 260);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final w = constraints.maxWidth;
+        final visible = List.generate(widget.items.length, (i) => i)
+            .where((i) => (i - _current).abs() <= 2)
+            .toList()
+          ..sort((a, b) =>
+              (b - _current).abs().compareTo((a - _current).abs()));
+        return Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            _HeroButton(
-              label: '▶  Reproducir',
-              filled: true,
-              onTap: () =>
-                  context.push('/detail?url=${Uri.encodeComponent(anime.url)}'),
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onHorizontalDragEnd: (d) {
+                final v = d.primaryVelocity ?? 0;
+                if (v < -200 && _current < widget.items.length - 1) {
+                  _goTo(_current + 1);
+                } else if (v > 200 && _current > 0) {
+                  _goTo(_current - 1);
+                }
+              },
+              child: SizedBox(
+                height: 240,
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: visible.map((i) => _buildCard(i, w)).toList(),
+                ),
+              ),
             ),
-            const SizedBox(width: 8),
-            _HeroButton(label: '+ Lista', filled: false, onTap: () {}),
+            const SizedBox(height: 10),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: List.generate(
+                widget.items.length,
+                (i) => AnimatedContainer(
+                  duration: const Duration(milliseconds: 300),
+                  margin: const EdgeInsets.symmetric(horizontal: 2.5),
+                  width: i == _current ? 20 : 5,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: i == _current
+                        ? AppColors.accent2
+                        : Colors.white.withValues(alpha: 0.25),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+            ),
           ],
+        );
+      },
+    );
+  }
+
+  Widget _buildCard(int itemIdx, double w) {
+    final anime = widget.items[itemIdx];
+    final dist = itemIdx - _current;
+    final absDist = dist.abs();
+
+    final double cW = w * 0.54;
+    final double nW = w * 0.43;
+    final double fW = w * 0.33;
+
+    final double cardW = absDist == 0 ? cW : absDist == 1 ? nW : fW;
+    final double cardH =
+        absDist == 0 ? 240.0 : absDist == 1 ? 202.0 : 168.0;
+
+    final double centerLeft = (w - cW) / 2;
+    double left;
+    if (dist == 0) {
+      left = centerLeft;
+    } else if (dist == -1) {
+      left = centerLeft - nW * 0.62;
+    } else if (dist == 1) {
+      left = centerLeft + cW - nW * 0.38;
+    } else if (dist == -2) {
+      left = centerLeft - nW * 0.62 - fW * 0.52;
+    } else {
+      left = centerLeft + cW - nW * 0.38 + fW * 0.52;
+    }
+
+    final double opacity = absDist == 0 ? 1.0 : absDist == 1 ? 0.55 : 0.25;
+    final double skewAngle = dist == 0 ? 0.0 : dist < 0 ? 0.18 : -0.18;
+
+    return AnimatedPositioned(
+      key: ValueKey(itemIdx),
+      duration: const Duration(milliseconds: 480),
+      curve: Curves.easeInOut,
+      left: left,
+      bottom: 0,
+      width: cardW,
+      height: cardH,
+      child: GestureDetector(
+        onTap: absDist == 0
+            ? () => context
+                .push('/detail?url=${Uri.encodeComponent(anime.url)}')
+            : () => _goTo(itemIdx),
+        child: AnimatedOpacity(
+          duration: const Duration(milliseconds: 350),
+          opacity: opacity,
+          child: Transform(
+            alignment: FractionalOffset.center,
+            transform: Matrix4.identity()
+              ..setEntry(3, 2, 0.001)
+              ..rotateY(skewAngle),
+            child: _CarouselCard(anime: anime, isCenter: absDist == 0),
+          ),
         ),
-      ],
+      ),
+    );
+  }
+}
+
+class _CarouselCard extends StatelessWidget {
+  final AnimeModel anime;
+  final bool isCenter;
+
+  const _CarouselCard({required this.anime, required this.isCenter});
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(18),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          if (anime.cover != null)
+            CachedNetworkImage(
+              imageUrl: anime.cover!,
+              fit: BoxFit.cover,
+              placeholder: (context, _) =>
+                  ColoredBox(color: AppColors.surface2),
+              errorWidget: (context, url, _) =>
+                  ColoredBox(color: AppColors.surface2),
+            )
+          else
+            ColoredBox(color: AppColors.surface2),
+          Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                stops: const [0.0, 0.4, 1.0],
+                colors: [
+                  Colors.transparent,
+                  Colors.black.withValues(alpha: 0.2),
+                  AppColors.bg,
+                ],
+              ),
+            ),
+          ),
+          DecoratedBox(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(
+                color: isCenter
+                    ? AppColors.accent.withValues(alpha: 0.45)
+                    : AppColors.border.withValues(alpha: 0.5),
+                width: isCenter ? 1.5 : 1,
+              ),
+            ),
+          ),
+          if (isCenter) ...[
+            Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.centerLeft,
+                  end: Alignment.centerRight,
+                  stops: const [0.0, 0.5],
+                  colors: [
+                    Colors.black.withValues(alpha: 0.4),
+                    Colors.transparent,
+                  ],
+                ),
+              ),
+            ),
+            Positioned(
+              left: 12,
+              right: 12,
+              bottom: 10,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: AppColors.accent,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: const Text(
+                      'TENDENCIA #1',
+                      style: TextStyle(
+                        fontSize: 9,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    anime.title,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w900,
+                      shadows: [Shadow(blurRadius: 8)],
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  if (anime.genres.isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      [
+                        ...anime.genres.take(2),
+                        if (anime.year != null) anime.year!,
+                      ].join(' · '),
+                      style: const TextStyle(
+                          fontSize: 10, color: Color(0xAAFFFFFF)),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      _HeroButton(
+                        label: 'Reproducir',
+                        icon: Icons.play_arrow_rounded,
+                        filled: true,
+                        onTap: () => context.push(
+                          '/detail?url=${Uri.encodeComponent(anime.url)}',
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      _HeroButton(
+                          label: '+ Lista', filled: false, onTap: () {}),
+                      if (anime.score != null) ...[
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 7, vertical: 5),
+                          decoration: BoxDecoration(
+                            color: AppColors.surface2.withValues(alpha: 0.85),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: AppColors.border),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Text('⭐',
+                                  style: TextStyle(fontSize: 9)),
+                              const SizedBox(width: 2),
+                              Text(
+                                anime.score!.toStringAsFixed(1),
+                                style: const TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w700),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
     );
   }
 }
 
 class _HeroButton extends StatelessWidget {
   final String label;
+  final IconData? icon;
   final bool filled;
   final VoidCallback onTap;
 
@@ -249,6 +526,7 @@ class _HeroButton extends StatelessWidget {
     required this.label,
     required this.filled,
     required this.onTap,
+    this.icon,
   });
 
   @override
@@ -264,9 +542,26 @@ class _HeroButton extends StatelessWidget {
           ),
           borderRadius: BorderRadius.circular(8),
         ),
-        child: Text(
-          label,
-          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (icon != null) ...[
+              Icon(
+                icon,
+                size: 15,
+                color: filled ? Colors.white : AppColors.textPrimary,
+              ),
+              const SizedBox(width: 5),
+            ],
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: filled ? Colors.white : AppColors.textPrimary,
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -478,7 +773,7 @@ class _ContinueWatching extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        SectionHeader(
+        _HomeSectionHeader(
           title: 'Continuar viendo',
           action: 'Ver todo',
           onAction: () => context.go('/history'),
@@ -553,16 +848,6 @@ class _ContinueWatching extends ConsumerWidget {
 
 // ── Spotlight ────────────────────────────────────────────────────────────────
 
-const _kSpotlightFilters = [
-  'Para mí',
-  'Acción',
-  'Romance',
-  'Isekai',
-  'Película',
-  'Clásico',
-  'Poco conocido',
-];
-
 class _SpotlightSection extends ConsumerStatefulWidget {
   final List<AnimeModel> candidates;
 
@@ -573,82 +858,30 @@ class _SpotlightSection extends ConsumerStatefulWidget {
 }
 
 class _SpotlightSectionState extends ConsumerState<_SpotlightSection> {
-  String _filter = 'Para mí';
   int _skipCount = 0;
 
   @override
   Widget build(BuildContext context) {
     final favorites = ref.watch(favoritesProvider);
     final history = ref.watch(watchHistoryProvider);
+    final selectedGenre = ref.watch(selectedHomeGenreProvider);
 
     final picks = _SpotlightPick.ranked(
       candidates: widget.candidates,
       favorites: favorites,
       history: history,
-      filter: _filter,
+      filter: selectedGenre,
     );
 
     if (picks.isEmpty) return const SizedBox.shrink();
 
     final mainIndex = picks.isNotEmpty ? _skipCount % picks.length : 0;
     final spotlight = picks[mainIndex];
-    final alsoSee = picks
-        .where((p) => p.anime.url != spotlight.anime.url)
-        .take(2)
-        .toList();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: SectionHeader(title: 'Sorpréndeme', action: null),
-        ),
-        const SizedBox(height: 10),
-        SizedBox(
-          height: 32,
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            itemCount: _kSpotlightFilters.length,
-            separatorBuilder: (context, index) => const SizedBox(width: 6),
-            itemBuilder: (context, index) {
-              final f = _kSpotlightFilters[index];
-              final active = f == _filter;
-              return GestureDetector(
-                onTap: () => setState(() {
-                  _filter = f;
-                  _skipCount = 0;
-                }),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 11,
-                    vertical: 5,
-                  ),
-                  decoration: BoxDecoration(
-                    color: active
-                        ? AppColors.accent.withValues(alpha: 0.15)
-                        : AppColors.surface,
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                      color: active ? AppColors.accent : AppColors.border,
-                    ),
-                  ),
-                  child: Text(
-                    f,
-                    style: TextStyle(
-                      color: active
-                          ? AppColors.accent2
-                          : AppColors.textSecondary,
-                      fontSize: 10,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-              );
-            },
-          ),
-        ),
+        _HomeSectionHeader(title: 'Sorpréndeme'),
         const SizedBox(height: 10),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -657,31 +890,6 @@ class _SpotlightSectionState extends ConsumerState<_SpotlightSection> {
             onSkip: () => setState(() => _skipCount++),
           ),
         ),
-        if (alsoSee.isNotEmpty) ...[
-          const SizedBox(height: 16),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'También podrías ver',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                ...alsoSee.map(
-                  (pick) => Padding(
-                    padding: const EdgeInsets.only(bottom: 6),
-                    child: _AlsoSeeRow(pick: pick),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
       ],
     );
   }
@@ -721,8 +929,7 @@ class _SpotlightPick {
       }
     }
 
-    var pool =
-        candidates.where((a) => a.url.isNotEmpty).toList();
+    var pool = candidates.where((a) => a.url.isNotEmpty).toList();
 
     // Apply genre/type filter
     final filtered = _applyFilter(pool, filter);
@@ -730,10 +937,11 @@ class _SpotlightPick {
 
     // Unseen first, seen fallback
     final unseen = pool.where((a) => !seenUrls.contains(a.url)).toList();
-    final ranked = (unseen.isNotEmpty ? unseen : pool)
-        .map((a) => MapEntry(a, _scoreAnime(a, genreWeights)))
-        .toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
+    final ranked =
+        (unseen.isNotEmpty ? unseen : pool)
+            .map((a) => MapEntry(a, _scoreAnime(a, genreWeights)))
+            .toList()
+          ..sort((a, b) => b.value.compareTo(a.value));
 
     return ranked.take(5).map((e) {
       final matchedGenres = e.key.genres
@@ -753,46 +961,42 @@ class _SpotlightPick {
     }).toList();
   }
 
-  static List<AnimeModel> _applyFilter(
-    List<AnimeModel> pool,
-    String filter,
-  ) {
+  static List<AnimeModel> _applyFilter(List<AnimeModel> pool, String filter) {
     return switch (filter) {
-      'Acción' => pool
-          .where(
-            (a) => a.genres.any((g) => g.toLowerCase().contains('acci')),
-          )
-          .toList(),
-      'Romance' => pool
-          .where(
-            (a) => a.genres.any(
-              (g) => g.toLowerCase() == 'romance',
-            ),
-          )
-          .toList(),
-      'Isekai' => pool
-          .where(
-            (a) => a.genres.any((g) => g.toLowerCase() == 'isekai'),
-          )
-          .toList(),
-      'Película' => pool
-          .where(
-            (a) =>
-                a.type?.toLowerCase().contains('movie') == true ||
-                a.type?.toLowerCase().contains('pel') == true ||
-                a.episodeCount == 1,
-          )
-          .toList(),
-      'Clásico' => pool
-          .where(
-            (a) =>
-                (int.tryParse(a.year ?? '') ?? 9999) <= 2005,
-          )
-          .toList(),
-      'Poco conocido' => pool
-          .where((a) => (a.score ?? 0) < 7.5)
-          .toList(),
-      _ => pool,
+      'Acción' =>
+        pool
+            .where((a) => a.genres.any((g) => g.toLowerCase().contains('acci')))
+            .toList(),
+      'Romance' =>
+        pool
+            .where((a) => a.genres.any((g) => g.toLowerCase() == 'romance'))
+            .toList(),
+      'Isekai' =>
+        pool
+            .where((a) => a.genres.any((g) => g.toLowerCase() == 'isekai'))
+            .toList(),
+      'Película' =>
+        pool
+            .where(
+              (a) =>
+                  a.type?.toLowerCase().contains('movie') == true ||
+                  a.type?.toLowerCase().contains('pel') == true ||
+                  a.episodeCount == 1,
+            )
+            .toList(),
+      'Clásico' =>
+        pool
+            .where((a) => (int.tryParse(a.year ?? '') ?? 9999) <= 2005)
+            .toList(),
+      'Poco conocido' => pool.where((a) => (a.score ?? 0) < 7.5).toList(),
+      'Todo' => pool,
+      _ =>
+        pool
+            .where(
+              (a) =>
+                  a.genres.any((g) => g.toLowerCase() == filter.toLowerCase()),
+            )
+            .toList(),
     };
   }
 
@@ -867,9 +1071,9 @@ class _SpotlightCard extends StatelessWidget {
                   child: Wrap(
                     spacing: 5,
                     children: [
-                      ...anime.genres.take(2).map(
-                        (g) => _SpotlightPill(label: g),
-                      ),
+                      ...anime.genres
+                          .take(2)
+                          .map((g) => _SpotlightPill(label: g)),
                       if (anime.status != null)
                         _SpotlightPill(label: anime.status!),
                     ],
@@ -1027,89 +1231,6 @@ class _SpotlightCard extends StatelessWidget {
   }
 }
 
-class _AlsoSeeRow extends StatelessWidget {
-  final _SpotlightPick pick;
-
-  const _AlsoSeeRow({required this.pick});
-
-  @override
-  Widget build(BuildContext context) {
-    final anime = pick.anime;
-    return GestureDetector(
-      onTap: () => context.push('/detail?url=${Uri.encodeComponent(anime.url)}'),
-      child: Container(
-        padding: const EdgeInsets.all(8),
-        decoration: BoxDecoration(
-          color: AppColors.surface,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: AppColors.border),
-        ),
-        child: Row(
-          children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(6),
-              child: SizedBox(
-                width: 36,
-                height: 50,
-                child: anime.cover != null
-                    ? CachedNetworkImage(
-                        imageUrl: anime.cover!,
-                        fit: BoxFit.cover,
-                        errorWidget: (context, url, err) =>
-                            const ColoredBox(color: Color(0xFF1A2D1F)),
-                      )
-                    : const ColoredBox(color: Color(0xFF1A2D1F)),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    anime.title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    [
-                      if (anime.genres.isNotEmpty) anime.genres.first,
-                      if (anime.episodeCount != null)
-                        '${anime.episodeCount} eps',
-                      if (anime.score != null)
-                        '⭐ ${anime.score!.toStringAsFixed(1)}',
-                    ].join(' · '),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: AppColors.textSecondary,
-                      fontSize: 10,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 8),
-            Text(
-              '${pick.match}% match',
-              style: TextStyle(
-                color: AppColors.accent2,
-                fontSize: 10,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 class _SpotlightPill extends StatelessWidget {
   final String label;
 
@@ -1136,6 +1257,164 @@ class _SpotlightPill extends StatelessWidget {
   }
 }
 
+// ── Home section header ───────────────────────────────────────────────────────
+
+class _HomeSectionHeader extends StatelessWidget {
+  final String title;
+  final String? action;
+  final VoidCallback? onAction;
+
+  const _HomeSectionHeader({
+    required this.title,
+    this.action,
+    this.onAction,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+      child: Row(
+        children: [
+          Container(
+            width: 3,
+            height: 16,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [AppColors.accent, AppColors.accent2],
+              ),
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              title,
+              style: const TextStyle(
+                  fontSize: 15, fontWeight: FontWeight.w900),
+            ),
+          ),
+          if (action != null)
+            GestureDetector(
+              onTap: onAction,
+              child: Text(
+                '$action →',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: AppColors.accent2,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Top 10 ────────────────────────────────────────────────────────────────────
+
+class _Top10Section extends StatelessWidget {
+  final List<AnimeModel> list;
+  const _Top10Section({required this.list});
+
+  @override
+  Widget build(BuildContext context) {
+    final top10 = list.take(10).toList();
+    if (top10.isEmpty) return const SizedBox.shrink();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _HomeSectionHeader(
+          title: 'Top 10 hoy',
+          action: 'Ver ranking',
+          onAction: () => context.go('/search'),
+        ),
+        SizedBox(
+          height: 185,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            itemCount: top10.length,
+            separatorBuilder: (context, _) => const SizedBox(width: 6),
+            itemBuilder: (context, i) =>
+                _Top10Card(anime: top10[i], rank: i + 1),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _Top10Card extends StatelessWidget {
+  final AnimeModel anime;
+  final int rank;
+  const _Top10Card({required this.anime, required this.rank});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () =>
+          context.push('/detail?url=${Uri.encodeComponent(anime.url)}'),
+      child: SizedBox(
+        width: 115,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: SizedBox(
+                width: 115,
+                height: 155,
+                child: anime.cover == null
+                    ? ColoredBox(color: AppColors.surface2)
+                    : CachedNetworkImage(
+                        imageUrl: anime.cover!,
+                        fit: BoxFit.cover,
+                        errorWidget: (context, url, _) =>
+                            ColoredBox(color: AppColors.surface2),
+                      ),
+              ),
+            ),
+            Positioned(
+              bottom: 24,
+              left: -4,
+              child: Text(
+                '$rank',
+                style: TextStyle(
+                  fontSize: 54,
+                  fontWeight: FontWeight.w900,
+                  height: 1,
+                  foreground: Paint()
+                    ..style = PaintingStyle.stroke
+                    ..strokeWidth = 2.5
+                    ..color = AppColors.accent2,
+                ),
+              ),
+            ),
+            Positioned(
+              bottom: 0,
+              left: 0,
+              right: 0,
+              child: Text(
+                anime.title,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    height: 1.3),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 // ── Generic horizontal row ────────────────────────────────────────────────────
 
 class _AnimeRow extends ConsumerWidget {
@@ -1152,7 +1431,7 @@ class _AnimeRow extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        SectionHeader(
+        _HomeSectionHeader(
           title: title,
           action: action == '' ? null : action ?? 'Ver todo',
           onAction: () => context.go('/search'),

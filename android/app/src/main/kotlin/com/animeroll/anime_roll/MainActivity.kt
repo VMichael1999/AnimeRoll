@@ -67,19 +67,33 @@ class MainActivity : FlutterActivity() {
     }
 
     private fun setIconStyle(style: String) {
+        val mainActivity = "com.animeroll.anime_roll.MainActivity"
         val aliases = mapOf(
-            "violeta" to "com.animeroll.anime_roll.MainActivityVioleta",
             "oceano" to "com.animeroll.anime_roll.MainActivityOceano",
             "carmesi" to "com.animeroll.anime_roll.MainActivityCarmesi",
             "esmeralda" to "com.animeroll.anime_roll.MainActivityEsmeralda"
         )
-        val selected = aliases[style] ?: aliases.getValue("violeta")
         val packageManager = applicationContext.packageManager
+        val selectedAlias = aliases[style]
 
-        aliases.values.forEach { alias ->
+        // violeta (default) = MainActivity enabled, all aliases disabled.
+        // others = MainActivity disabled, only the target alias enabled.
+        // (Android requires exactly one LAUNCHER-eligible component enabled to
+        // avoid the dual-icon glitch in the launcher.)
+        packageManager.setComponentEnabledSetting(
+            ComponentName(applicationContext, mainActivity),
+            if (selectedAlias == null) {
+                PackageManager.COMPONENT_ENABLED_STATE_ENABLED
+            } else {
+                PackageManager.COMPONENT_ENABLED_STATE_DISABLED
+            },
+            PackageManager.DONT_KILL_APP
+        )
+
+        aliases.forEach { (_, alias) ->
             packageManager.setComponentEnabledSetting(
                 ComponentName(applicationContext, alias),
-                if (alias == selected) {
+                if (alias == selectedAlias) {
                     PackageManager.COMPONENT_ENABLED_STATE_ENABLED
                 } else {
                     PackageManager.COMPONENT_ENABLED_STATE_DISABLED

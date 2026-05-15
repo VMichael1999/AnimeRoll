@@ -184,19 +184,82 @@ class DownloadsNotifier extends StateNotifier<List<DownloadModel>> {
   }
 
   Future<void> pauseDownload(String id) async {
+    final target = state.where((item) => item.id == id).firstOrNull;
+    if (target == null) return;
+
+    // Local marker so the UI flips immediately and any in-flight local save
+    // stops picking it up.
     _updateItem(id, (download) {
       if (download.isSavedOnDevice || download.localStatus == 'failed') {
         return download;
       }
       return download.copyWith(localStatus: 'paused');
     });
+
+    // Tell the server to pause the actual remote download too.
+    if (!target.isSavedOnDevice && target.status != 'completed') {
+      try {
+        final latest =
+            await _ref.read(animeRepositoryProvider).pauseDownload(id);
+        _updateItem(
+          id,
+          (download) => download.copyWith(
+            status: latest.status,
+            phase: latest.phase,
+            progress: latest.progress,
+            downloadedBytes: latest.downloadedBytes,
+            totalBytes: latest.totalBytes,
+            speedBytesPerSecond: latest.speedBytesPerSecond,
+            etaSeconds: latest.etaSeconds,
+            error: latest.error,
+            localStatus: 'paused',
+          ),
+        );
+      } on DioException {
+        // Keep the local pause even if the server call failed.
+      } catch (_) {
+        // Ignore network/format errors — the UI already reflects the pause.
+      }
+    }
   }
 
   Future<void> resumeDownload(String id) async {
+    final target = state.where((item) => item.id == id).firstOrNull;
+    if (target == null) return;
+
+    // Reset local pause so the queue can pick it up again.
     _updateItem(id, (download) {
-      if (!download.isPaused) return download;
-      return download.copyWith(localStatus: 'pending');
+      if (download.isSavedOnDevice) return download;
+      return download.copyWith(localStatus: 'pending', error: null);
     });
+
+    // Ask the server to re-enqueue the remote download from scratch.
+    if (!target.isSavedOnDevice && target.status != 'completed') {
+      try {
+        final latest =
+            await _ref.read(animeRepositoryProvider).resumeDownload(id);
+        _updateItem(
+          id,
+          (download) => download.copyWith(
+            status: latest.status,
+            phase: latest.phase,
+            progress: latest.progress,
+            downloadedBytes: latest.downloadedBytes,
+            totalBytes: latest.totalBytes,
+            speedBytesPerSecond: latest.speedBytesPerSecond,
+            etaSeconds: latest.etaSeconds,
+            downloadUrl: latest.downloadUrl,
+            error: latest.error,
+            localStatus: 'pending',
+          ),
+        );
+      } on DioException {
+        // Keep the optimistic local resume even if the server failed.
+      } catch (_) {
+        // Ignore.
+      }
+    }
+
     _startPolling();
     unawaited(_drainLocalSaveQueue());
   }
@@ -227,6 +290,15 @@ class DownloadsNotifier extends StateNotifier<List<DownloadModel>> {
     await _persist();
     if (deleteFile && target?.localPath != null) {
       await _videoSaver.deleteVideo(target!.localPath);
+    }
+    // Best-effort: tell the server to delete the remote record too so future
+    // restarts don't pick up an orphan.
+    try {
+      await _ref.read(animeRepositoryProvider).deleteDownload(id);
+    } on DioException {
+      // Server may already have lost the record (404). Ignore.
+    } catch (_) {
+      // Ignore.
     }
   }
 

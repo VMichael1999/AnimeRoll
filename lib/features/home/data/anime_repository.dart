@@ -382,6 +382,20 @@ class AnimeRepository {
     return DownloadModel.fromJson(_responseData(response));
   }
 
+  Future<DownloadModel> pauseDownload(String downloadId) async {
+    final response = await _dio.post('/anime/download/$downloadId/pause');
+    return DownloadModel.fromJson(_responseData(response));
+  }
+
+  Future<DownloadModel> resumeDownload(String downloadId) async {
+    final response = await _dio.post('/anime/download/$downloadId/resume');
+    return DownloadModel.fromJson(_responseData(response));
+  }
+
+  Future<void> deleteDownload(String downloadId) async {
+    await _dio.delete('/anime/download/$downloadId');
+  }
+
   Future<BatchDownloadModel> createBatchDownload({
     required String animeUrl,
     required List<int> episodes,

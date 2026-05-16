@@ -1,5 +1,6 @@
 // coverage:ignore-file
 import 'dart:async';
+import 'dart:collection';
 import 'dart:io' show Platform;
 import 'package:better_player_plus/better_player_plus.dart';
 import 'package:floating/floating.dart';
@@ -8,8 +9,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:webview_flutter/webview_flutter.dart';
+import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/web/ad_blocker.dart';
 import '../../../shared/models/anime_model.dart';
 import '../../../shared/models/episode_model.dart';
 import '../../../shared/widgets/app_toast.dart';
@@ -88,12 +90,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       final dataSource = BetterPlayerDataSource(
         BetterPlayerDataSourceType.network,
         videoUrl,
-        headers: const {
-          'Referer': 'https://animeav1.com/',
-          'Origin': 'https://animeav1.com',
-          'User-Agent':
-              'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15',
-        },
+        headers: _headersForVideoUrl(videoUrl),
         videoFormat: isHls ? BetterPlayerVideoFormat.hls : null,
       );
 
@@ -314,16 +311,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
             lower.contains('player.zilla'))) {
       return false;
     }
-    if (isApplePlatform) {
-      return lower.contains('.m3u8') ||
-          lower.contains('.mp4') ||
-          lower.contains('.mov');
-    }
-    return lower.contains('.m3u8') ||
-        lower.contains('.mp4') ||
-        lower.contains('.webm') ||
-        lower.contains('.mkv') ||
-        lower.contains('.mov');
+    // Match ONLY real file extensions: the extension must be followed by `?`,
+    // `#`, `/`, or end-of-string. Plain `.contains('.mp4')` was matching
+    // `www.mp4upload.com` (substring `.mp4u`) and similar embed hosts, causing
+    // ExoPlayer to try playing an HTML embed page as a video → "Source error".
+    final applePattern = RegExp(r'\.(m3u8|mp4|mov)([?#/]|$)');
+    final androidPattern = RegExp(r'\.(m3u8|mp4|mov|webm|mkv)([?#/]|$)');
+    return (isApplePlatform ? applePattern : androidPattern).hasMatch(lower);
   }
 
   Future<void> _enterPiP() async {
@@ -424,12 +418,227 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   Widget _embedPlayer(String url) {
     // Use the original embed URL (NOT the rewritten /m3u8/<id> variant) so the
     // player page can run its own JS and resolve the real stream internally.
-    final controller = WebViewController()
-      ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..setBackgroundColor(Colors.black)
-      ..loadRequest(Uri.parse(url));
+    //
+    // Three layers of ad/popup defense:
+    //   1) ContentBlocker — blocks ad/tracker subresources at the network layer.
+    //   2) shouldOverrideUrlLoading + onCreateWindow — block popup navigation.
+    //   3) Injected JS (`addUserScript`) — overrides window.open and intercepts
+    //      synthetic anchor clicks that VOE uses to bypass ContentBlocker.
+    return InAppWebView(
+      // Force rebuild when URL changes (switching servers). Without this, Flutter
+      // reuses the same widget instance and the WebView keeps the old page.
+      key: ValueKey<String>(url),
+      initialUrlRequest: URLRequest(url: WebUri(url)),
+      initialSettings: InAppWebViewSettings(
+        javaScriptEnabled: true,
+        mediaPlaybackRequiresUserGesture: false,
+        useShouldOverrideUrlLoading: true,
+        useOnLoadResource: false,
+        transparentBackground: false,
+        supportZoom: false,
+        contentBlockers: buildEmbedAdBlockers(),
+        // Allow inline + fullscreen video; YourUpload's <video> needs both.
+        allowsInlineMediaPlayback: true,
+        iframeAllowFullscreen: true,
+        // Android: hybrid composition lets the video surface composite
+        // correctly when the WebView is sized to fit the player area.
+        useHybridComposition: true,
+        // Mobile UA so embeds serve their mobile player (smaller, fewer ads).
+        userAgent:
+            'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 '
+            '(KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
+      ),
+      // Run an anti-popup script at document start, BEFORE any of the page's
+      // own scripts execute. This neutralizes VOE's popup chain (which uses
+      // synchronous window.open from click handlers and a hidden anchor that
+      // gets programmatically clicked).
+      initialUserScripts: UnmodifiableListView<UserScript>([
+        UserScript(
+          source: _antiPopupScript,
+          injectionTime: UserScriptInjectionTime.AT_DOCUMENT_START,
+        ),
+        UserScript(
+          source: _antiOverlayScript,
+          injectionTime: UserScriptInjectionTime.AT_DOCUMENT_END,
+        ),
+      ]),
+      shouldOverrideUrlLoading: (controller, action) async {
+        final target = action.request.url?.toString().toLowerCase() ?? '';
+        const adHosts = [
+          'doubleclick',
+          'googlesyndication',
+          'popads',
+          'popcash',
+          'propellerads',
+          'onclickads',
+          'adsterra',
+          'exoclick',
+          'juicyads',
+          'trafficjunky',
+          'clickadu',
+          'hilltopads',
+          // VOE-specific popup chain
+          'lambsaktur',
+          'popcdn',
+          'voe-network',
+          'voe-un',
+          'voe-st',
+        ];
+        for (final host in adHosts) {
+          if (target.contains(host)) {
+            return NavigationActionPolicy.CANCEL;
+          }
+        }
+        // Block any navigation that's clearly off-host from the original embed.
+        // Most embed pages stay within their own domain to load the video.
+        return NavigationActionPolicy.ALLOW;
+      },
+      onCreateWindow: (controller, action) async {
+        // Block all popup windows — exclusively ads for these embed servers.
+        return false;
+      },
+    );
+  }
 
-    return WebViewWidget(controller: controller);
+  /// JS injected before any of the embed page's own scripts. Disables every
+  /// known popup vector: window.open, programmatic clicks on anchor[target],
+  /// document.location assignments to off-host URLs, and `<meta refresh>`
+  /// redirects to ad domains.
+  static const String _antiPopupScript = r'''
+(function() {
+  // 1. Neutralize window.open — return a stub object so callers don't crash.
+  var noopWin = { closed: true, close: function(){}, focus: function(){},
+    blur: function(){}, postMessage: function(){}, document: {} };
+  try {
+    Object.defineProperty(window, 'open', {
+      value: function() { return noopWin; },
+      writable: false, configurable: false
+    });
+  } catch (e) {}
+
+  // 2. Intercept clicks on anchors with target=_blank (popup style).
+  document.addEventListener('click', function(e) {
+    var el = e.target;
+    while (el && el !== document.body) {
+      if (el.tagName === 'A' && (el.target === '_blank' || el.rel === 'noopener')) {
+        var href = (el.href || '').toLowerCase();
+        // If the link goes off-host, kill it.
+        if (href && href.indexOf(location.host) === -1) {
+          e.preventDefault();
+          e.stopPropagation();
+          return false;
+        }
+      }
+      el = el.parentElement;
+    }
+  }, true);
+
+  // 3. Block <meta http-equiv="refresh"> redirects added dynamically.
+  var origAppend = Element.prototype.appendChild;
+  Element.prototype.appendChild = function(child) {
+    if (child && child.tagName === 'META' &&
+        (child.httpEquiv || '').toLowerCase() === 'refresh') {
+      return child;
+    }
+    return origAppend.call(this, child);
+  };
+})();
+''';
+
+  /// JS injected at document end. VOE specifically renders ad overlays as inline
+  /// divs/iframes with high z-index that sit ON TOP of the video. We:
+  ///   1) Hide them with a stylesheet (covers static & SPA renders).
+  ///   2) Run a MutationObserver that strips new overlay nodes as they appear.
+  static const String _antiOverlayScript = r'''
+(function() {
+  // 1. Stylesheet that hides common ad-overlay patterns.
+  var style = document.createElement('style');
+  style.textContent = [
+    // VOE / generic full-screen ad overlays
+    '[id*="overlay" i]:not(video):not([id*="player" i]):not([id*="control" i]),',
+    '[class*="overlay" i]:not(video):not([class*="player" i]):not([class*="control" i]):not([class*="loading" i]):not([class*="spinner" i]),',
+    '[id*="popup" i], [class*="popup" i],',
+    '[id*="banner" i], [class*="banner" i]:not([class*="player" i]),',
+    '[id*="advert" i], [class*="advert" i],',
+    '[id^="ad-"], [class^="ad-"], [id$="-ad"], [class$="-ad"],',
+    '[id*="adsterra" i], [class*="adsterra" i],',
+    '[id*="exoclick" i], [class*="exoclick" i],',
+    'iframe[src*="ads" i], iframe[src*="popcdn" i], iframe[src*="lambsaktur" i]',
+    '{ display: none !important; visibility: hidden !important; opacity: 0 !important; pointer-events: none !important; }',
+    // Block fixed-position floating ads
+    'div[style*="position: fixed"][style*="z-index"]:not([id*="player" i]):not([class*="player" i])',
+    '{ display: none !important; }',
+  ].join('\n');
+  (document.head || document.documentElement).appendChild(style);
+
+  // 2. MutationObserver: strip overlay nodes injected after page load.
+  var adKeywords = ['overlay', 'popup', 'banner', 'advert', 'ads', 'adsterra',
+    'exoclick', 'popcdn', 'lambsaktur'];
+  function looksLikeAd(el) {
+    if (!el || !el.tagName) return false;
+    var t = el.tagName.toLowerCase();
+    if (t === 'video' || t === 'source' || t === 'track') return false;
+    var id = (el.id || '').toLowerCase();
+    var cls = (el.className && el.className.toString ? el.className.toString() : '').toLowerCase();
+    // Whitelist obvious player/control elements
+    if (id.indexOf('player') !== -1 || id.indexOf('control') !== -1) return false;
+    if (cls.indexOf('player') !== -1 || cls.indexOf('control') !== -1) return false;
+    for (var i = 0; i < adKeywords.length; i++) {
+      if (id.indexOf(adKeywords[i]) !== -1 || cls.indexOf(adKeywords[i]) !== -1) {
+        return true;
+      }
+    }
+    if (t === 'iframe') {
+      var src = (el.src || '').toLowerCase();
+      if (src.indexOf('ads') !== -1 || src.indexOf('popcdn') !== -1 ||
+          src.indexOf('lambsaktur') !== -1) {
+        return true;
+      }
+    }
+    return false;
+  }
+  var observer = new MutationObserver(function(mutations) {
+    for (var m = 0; m < mutations.length; m++) {
+      var added = mutations[m].addedNodes;
+      for (var i = 0; i < added.length; i++) {
+        var node = added[i];
+        if (node.nodeType === 1 && looksLikeAd(node)) {
+          try { node.remove(); } catch (e) {}
+        }
+      }
+    }
+  });
+  observer.observe(document.documentElement, { childList: true, subtree: true });
+})();
+''';
+
+  /// Choose Referer/Origin headers based on the video URL's host.
+  ///
+  /// Some CDNs (HentaiLA's `cdn.hentaila.com`, AnimeAV1's HLS, etc.) reject
+  /// requests whose `Referer` doesn't match their expected provider domain.
+  /// Hardcoding `animeav1.com` for everything would break HentaiLA's direct
+  /// MP4 downloads with a `403` / source error in ExoPlayer.
+  Map<String, String> _headersForVideoUrl(String videoUrl) {
+    const ua =
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 '
+        '(KHTML, like Gecko) Version/17.0 Safari/605.1.15';
+    final host = Uri.tryParse(videoUrl)?.host.toLowerCase() ?? '';
+
+    // HentaiLA: CDN + direct downloads
+    if (host.contains('hentaila.com') || host.contains('hentaila')) {
+      return {
+        'Referer': 'https://hentaila.com/',
+        'Origin': 'https://hentaila.com',
+        'User-Agent': ua,
+      };
+    }
+
+    // Default to AnimeAV1 — most providers funnel through its HLS/embed chain.
+    return {
+      'Referer': 'https://animeav1.com/',
+      'Origin': 'https://animeav1.com',
+      'User-Agent': ua,
+    };
   }
 
   String _playbackUrl(String url) {

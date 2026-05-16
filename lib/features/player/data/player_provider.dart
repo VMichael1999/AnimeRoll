@@ -106,14 +106,10 @@ bool _isNativePlayableUrl(String url) {
           lower.contains('player.zilla'))) {
     return false;
   }
-  if (_isApplePlatform) {
-    return lower.contains('.m3u8') ||
-        lower.contains('.mp4') ||
-        lower.contains('.mov');
-  }
-  return lower.contains('.m3u8') ||
-      lower.contains('.mp4') ||
-      lower.contains('.webm') ||
-      lower.contains('.mkv') ||
-      lower.contains('.mov');
+  // Match ONLY real file extensions: extension must be followed by `?`, `#`,
+  // `/`, or end-of-string. `contains('.mp4')` was matching `www.mp4upload.com`
+  // (substring `.mp4u`) and routing embed pages to ExoPlayer.
+  final applePattern = RegExp(r'\.(m3u8|mp4|mov)([?#/]|$)');
+  final androidPattern = RegExp(r'\.(m3u8|mp4|mov|webm|mkv)([?#/]|$)');
+  return (_isApplePlatform ? applePattern : androidPattern).hasMatch(lower);
 }

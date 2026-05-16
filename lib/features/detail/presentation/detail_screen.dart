@@ -503,11 +503,16 @@ class _GenreTag extends StatelessWidget {
 }
 
 void _openGenreCatalog(BuildContext context, AnimeModel anime, String genre) {
-  final domain = Uri.tryParse(anime.url)?.host.contains('hentaila') == true
-      ? 'hentaila.com'
-      : 'animeav1.com';
+  final isHentaila =
+      Uri.tryParse(anime.url)?.host.contains('hentaila') == true;
+  final domain = isHentaila ? 'hentaila.com' : 'animeav1.com';
+  // AnimeAV1 espera slugs ASCII (`accion`, `ciencia-ficcion`). HentaiLA en
+  // cambio espera los nombres tal cual aparecen en el sitio (`Ahegao`,
+  // `Juegos Sexuales`). Si normalizabamos a slug, el filtro de HentaiLA no
+  // devolvia resultados al venir desde el detalle.
+  final genreValue = isHentaila ? genre : catalogGenreValue(genre);
   context.go(
-    '/search?mode=catalog&domain=$domain&genre=${Uri.encodeComponent(catalogGenreValue(genre))}',
+    '/search?mode=catalog&domain=$domain&genre=${Uri.encodeComponent(genreValue)}',
   );
 }
 

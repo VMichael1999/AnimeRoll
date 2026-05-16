@@ -4,6 +4,7 @@ import '../../../shared/models/anime_model.dart';
 import '../../../shared/models/available_filters.dart';
 import '../../../shared/models/download_model.dart';
 import '../../../shared/models/episode_model.dart';
+import '../../../shared/models/monoschinos_hub.dart';
 import '../../../shared/models/schedule_anime_model.dart';
 
 class AnimeRepository {
@@ -121,6 +122,27 @@ class AnimeRepository {
     return items
         .map((e) => AnimeModel.fromJson(e as Map<String, dynamic>))
         .toList();
+  }
+
+  /// Hub de MonosChinos: últimos capítulos publicados en la home del sitio.
+  /// El backend scrapea la home y normaliza al shape
+  /// `{ latestEpisodes: [{title, slug, url, episodeUrl, episode, poster, genre}] }`.
+  Future<MonosChinosHubData> monosChinosHub() async {
+    final response = await _dio.get(
+      '/anime/hub',
+      queryParameters: {'domain': 'monoschinos2.net'},
+    );
+    final data = _responseData(response);
+    final rawEpisodes = data['latestEpisodes'];
+    final List items = rawEpisodes is List ? rawEpisodes : const [];
+    return MonosChinosHubData(
+      latestEpisodes: items
+          .whereType<Map>()
+          .map(
+            (e) => MonosChinosLatestEpisode.fromJson(e.cast<String, dynamic>()),
+          )
+          .toList(),
+    );
   }
 
   Future<HentailaHubData> hentailaHub() async {

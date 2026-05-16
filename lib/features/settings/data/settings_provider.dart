@@ -181,14 +181,6 @@ final darkThemePrefProvider =
           PersistedSettingNotifier(key: 'darkThemePref', defaultValue: true),
     );
 
-final debugDownloadPrefProvider =
-    StateNotifierProvider<PersistedSettingNotifier<bool>, bool>(
-      (ref) => PersistedSettingNotifier(
-        key: 'debugDownloadPref',
-        defaultValue: false,
-      ),
-    );
-
 final simultaneousDownloadsProvider =
     StateNotifierProvider<PersistedSettingNotifier<int>, int>(
       (ref) => PersistedSettingNotifier(

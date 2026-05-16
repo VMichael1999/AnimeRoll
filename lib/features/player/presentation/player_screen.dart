@@ -18,6 +18,7 @@ import '../../../shared/widgets/app_toast.dart';
 import '../../../shared/widgets/error_view.dart';
 import '../../detail/data/detail_provider.dart';
 import '../../downloads/data/downloads_provider.dart';
+import '../../home/data/home_provider.dart' show catalogGenreValue;
 import '../../downloads/presentation/download_server_sheet.dart';
 import '../../favorites/data/favorites_provider.dart';
 import '../../history/data/watch_history_provider.dart';
@@ -844,16 +845,39 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     );
   }
 
+  /// Deduce la URL del anime a partir de la URL del episodio cuando el
+  /// caller no la pasó explícita. Cada proveedor tiene su patrón propio:
+  ///   - HentaiLA:    `/ver/<slug>-N`             → `/media/<slug>`
+  ///   - MonosChinos: `/ver/<slug>-episodio-N`    → `/anime/<slug>`
+  ///   - AnimeAV1 y similares: `/media/<slug>/N`  → `/media/<slug>`
+  /// Devuelve cadena vacía si no logra inferir nada.
   String _inferAnimeUrl(String episodeUrl) {
     final uri = Uri.tryParse(episodeUrl);
     if (uri == null || uri.pathSegments.isEmpty) return '';
-    if (uri.host.contains('hentaila.com') &&
+    final host = uri.host.toLowerCase();
+
+    // HentaiLA: /ver/<slug>-N (slug puede contener guiones, N es solo dígitos
+    // al final). El sitio sirve detalle en /media/<slug>.
+    if (host.contains('hentaila.com') &&
         uri.pathSegments.length >= 2 &&
         uri.pathSegments.first == 'ver') {
       final episodeSlug = uri.pathSegments[1];
       final animeSlug = episodeSlug.replaceFirst(RegExp(r'-\d+$'), '');
       return uri.replace(pathSegments: ['media', animeSlug]).toString();
     }
+
+    // MonosChinos: /ver/<slug>-episodio-N. El sufijo es siempre literal
+    // `-episodio-<dígitos>` y el detalle vive en /anime/<slug>.
+    if (host.contains('monoschinos') &&
+        uri.pathSegments.length >= 2 &&
+        uri.pathSegments.first == 'ver') {
+      final episodeSlug = uri.pathSegments[1];
+      final animeSlug = episodeSlug.replaceFirst(RegExp(r'-episodio-\d+$'), '');
+      return uri.replace(pathSegments: ['anime', animeSlug]).toString();
+    }
+
+    // Fallback genérico: /media/<slug>/N → /media/<slug>. Cubre AnimeAV1 y
+    // proveedores con el mismo shape.
     if (uri.pathSegments.length < 3) return '';
     final parentSegments = uri.pathSegments.take(uri.pathSegments.length - 1);
     return uri.replace(pathSegments: parentSegments).toString();
@@ -2388,12 +2412,28 @@ class _EpisodeInfoBody extends ConsumerWidget {
         ],
         if (anime?.genres.isNotEmpty == true) ...[
           const SizedBox(height: 14),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: anime!.genres
-                .map((genre) => _GenrePill(label: genre))
-                .toList(),
+          Builder(
+            builder: (context) {
+              // Capturamos en una variable local para que el analyzer entienda
+              // que `anime` ya no es nullable dentro del closure del map.
+              final animeRef = anime!;
+              return Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: animeRef.genres
+                    .map(
+                      (genre) => _GenrePill(
+                        label: genre,
+                        onTap: () => _openGenreCatalogFromPlayer(
+                          context,
+                          animeUrl: animeRef.url,
+                          genre: genre,
+                        ),
+                      ),
+                    )
+                    .toList(),
+              );
+            },
           ),
         ],
         if (anime?.synopsis?.isNotEmpty == true) ...[
@@ -2450,24 +2490,61 @@ class _EpisodeInfoBody extends ConsumerWidget {
 
 class _GenrePill extends StatelessWidget {
   final String label;
+  final VoidCallback? onTap;
 
-  const _GenrePill({required this.label});
+  const _GenrePill({required this.label, this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.border),
-        color: AppColors.surface2,
-      ),
-      child: Text(
-        label,
-        style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+    final accent = Theme.of(context).colorScheme.secondary;
+    final clickable = onTap != null;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: clickable ? accent : AppColors.border,
+          ),
+          color: AppColors.surface2,
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            color: clickable ? accent : AppColors.textSecondary,
+            fontWeight: clickable ? FontWeight.w700 : FontWeight.w500,
+          ),
+        ),
       ),
     );
   }
+}
+
+/// Navega al catálogo filtrado por género, normalizando el valor según el
+/// proveedor que detectamos en la URL del anime (mismo criterio que en el
+/// detalle: AnimeAV1 usa slugs ASCII, HentaiLA/MonosChinos usan el nombre
+/// tal cual aparece en su sitio).
+void _openGenreCatalogFromPlayer(
+  BuildContext context, {
+  required String animeUrl,
+  required String genre,
+}) {
+  final host = Uri.tryParse(animeUrl)?.host ?? '';
+  final isHentaila = host.contains('hentaila');
+  final isMonos = host.contains('monoschinos');
+  final domain = isHentaila
+      ? 'hentaila.com'
+      : isMonos
+      ? 'monoschinos2.net'
+      : 'animeav1.com';
+  // HentaiLA acepta el label exacto; el resto usa slugs ASCII derivados.
+  final genreValue = isHentaila ? genre : catalogGenreValue(genre);
+  context.go(
+    '/search?mode=catalog&domain=$domain&genre=${Uri.encodeComponent(genreValue)}',
+  );
 }
 
 class _MetricChip extends StatelessWidget {

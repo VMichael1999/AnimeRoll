@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../shared/models/anime_model.dart';
+import '../../../shared/models/monoschinos_hub.dart';
 import '../../../shared/models/schedule_anime_model.dart';
 import '../../settings/data/settings_provider.dart';
 import 'anime_repository.dart';
@@ -11,6 +12,27 @@ final animeRepositoryProvider = Provider<AnimeRepository>(
 final hentailaHubProvider = FutureProvider<HentailaHubData>((ref) async {
   final repo = ref.read(animeRepositoryProvider);
   return repo.hentailaHub();
+});
+
+/// Hub de MonosChinos (últimos capítulos publicados). Solo se usa cuando el
+/// proveedor activo es `monoschinos2.net`; en otros casos el home cae al flujo
+/// genérico (schedule / catalog).
+final monosChinosHubProvider = FutureProvider<MonosChinosHubData>((ref) async {
+  final repo = ref.read(animeRepositoryProvider);
+  return repo.monosChinosHub();
+});
+
+/// Animes "En emisión" para la home de MonosChinos. Es una vista derivada
+/// del catálogo filtrado por `?estado=en+emision`. El usuario pidió que esta
+/// sección esté visible al iniciar la app cuando MonosChinos es el proveedor
+/// activo — ver mensaje original.
+final monosChinosAiringProvider = FutureProvider<List<AnimeModel>>((ref) async {
+  final repo = ref.read(animeRepositoryProvider);
+  return repo.catalog(
+    domain: 'monoschinos2.net',
+    status: 'en emision',
+    limit: 18,
+  );
 });
 
 final popularAnimeProvider = FutureProvider<List<AnimeModel>>((ref) async {

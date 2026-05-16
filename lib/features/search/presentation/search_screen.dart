@@ -44,9 +44,17 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     if (domain != null && domain.isNotEmpty) {
       ref.read(providerPrefProvider.notifier).set(domain);
     }
+    // Respetamos el modo solicitado por la URL. Antes solo se forzaba a
+    // `catalog` y el modo `search` quedaba pegado al anterior — esto causaba
+    // que al tocar la lupa de MonosChinos siguiera en catálogo si el usuario
+    // había visitado el catálogo antes.
     if (widget.initialMode == 'catalog' ||
         (genre != null && genre.isNotEmpty)) {
       ref.read(searchModeProvider.notifier).state = SearchMode.catalog;
+    } else if (widget.initialMode == 'search') {
+      ref.read(searchModeProvider.notifier).state = SearchMode.search;
+    } else if (widget.initialMode == 'mood') {
+      ref.read(searchModeProvider.notifier).state = SearchMode.mood;
     }
     if (genre != null && genre.isNotEmpty) {
       ref.read(catalogLetterProvider.notifier).state = '#';
@@ -66,7 +74,12 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     final mode = ref.watch(searchModeProvider);
     final activeProvider = ref.watch(providerPrefProvider);
     final isHentaila = activeProvider == 'hentaila.com';
+    final isMonosChinos = activeProvider == 'monoschinos2.net';
+    // HentaiLA fuerza catalog porque su UX combina buscar+filtros en una
+    // pantalla. MonosChinos respeta el modo elegido: si vienes de la lupa
+    // se queda en `search`, si vienes del "VER TODO" del home va a `catalog`.
     final effectiveMode = isHentaila ? SearchMode.catalog : mode;
+    final isProviderScoped = isHentaila || isMonosChinos;
 
     return Scaffold(
       body: SafeArea(
@@ -82,14 +95,18 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                     children: [
                       Expanded(
                         child: Text(
-                          isHentaila ? 'Catalogo de Hentai' : 'Buscar',
+                          isHentaila
+                              ? 'Catalogo de Hentai'
+                              : isMonosChinos
+                              ? 'MonosChinos'
+                              : 'Buscar',
                           style: TextStyle(
                             fontSize: 20,
                             fontWeight: FontWeight.w800,
                           ),
                         ),
                       ),
-                      if (!isHentaila)
+                      if (!isHentaila) ...[
                         _ModeButton(
                           label: 'Buscar',
                           active: mode == SearchMode.search,
@@ -97,17 +114,20 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                               ref.read(searchModeProvider.notifier).state =
                                   SearchMode.search,
                         ),
-                      if (!isHentaila) const SizedBox(width: 8),
-                      if (!isHentaila)
-                        _ModeButton(
-                          label: 'Mood',
-                          active: mode == SearchMode.mood,
-                          onTap: () =>
-                              ref.read(searchModeProvider.notifier).state =
-                                  SearchMode.mood,
-                        ),
-                      if (!isHentaila) const SizedBox(width: 8),
-                      if (!isHentaila)
+                        const SizedBox(width: 8),
+                        // MonosChinos no expone mood-search (no es soportado
+                        // por su backend) — ocultamos esa pestaña para no
+                        // ofrecer una opción que no funcionaría.
+                        if (!isMonosChinos) ...[
+                          _ModeButton(
+                            label: 'Mood',
+                            active: mode == SearchMode.mood,
+                            onTap: () =>
+                                ref.read(searchModeProvider.notifier).state =
+                                    SearchMode.mood,
+                          ),
+                          const SizedBox(width: 8),
+                        ],
                         _ModeButton(
                           label: 'Catálogo',
                           active: mode == SearchMode.catalog,
@@ -115,6 +135,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                               ref.read(searchModeProvider.notifier).state =
                                   SearchMode.catalog,
                         ),
+                      ],
                     ],
                   ),
                   const SizedBox(height: 12),
@@ -123,12 +144,13 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                     _SearchHeader(
                       controller: _controller,
                       isHentaila: isHentaila,
+                      isMonosChinos: isMonosChinos,
                       mood: effectiveMode == SearchMode.mood,
                     )
                   else if (isHentaila)
                     _HentailaCatalogHeader(controller: _controller)
                   else
-                    const _CatalogHeader(),
+                    _CatalogHeader(isProviderScoped: isProviderScoped),
                 ],
               ),
             ),
@@ -170,17 +192,20 @@ class _HentailaCatalogHeader extends ConsumerWidget {
 class _SearchHeader extends ConsumerWidget {
   final TextEditingController controller;
   final bool isHentaila;
+  final bool isMonosChinos;
   final bool mood;
 
   const _SearchHeader({
     required this.controller,
     required this.isHentaila,
+    this.isMonosChinos = false,
     this.mood = false,
   });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final selectedDomain = ref.watch(domainProvider);
+    final scoped = isHentaila || isMonosChinos;
     return Column(
       children: [
         _SearchInput(
@@ -188,13 +213,19 @@ class _SearchHeader extends ConsumerWidget {
           onChanged: (v) => ref.read(queryProvider.notifier).state = v,
           hintText: isHentaila
               ? 'Buscar en HentaiLA...'
+              : isMonosChinos
+              ? 'Buscar en MonosChinos...'
               : mood
               ? 'Ej: quiero algo triste, accion intensa...'
               : 'Buscar anime, genero...',
         ),
         if (mood) const _MoodChips(),
-        if (isHentaila)
-          const _ProviderModeBadge()
+        if (scoped)
+          _ProviderModeBadge(
+            label: isHentaila
+                ? 'Modo HentaiLA activo'
+                : 'Modo MonosChinos activo',
+          )
         else ...[
           const SizedBox(height: 10),
           _ProviderFilter(
@@ -249,7 +280,13 @@ class _MoodChips extends ConsumerWidget {
 }
 
 class _CatalogHeader extends ConsumerWidget {
-  const _CatalogHeader();
+  /// Si el proveedor activo es scoped (hentaila/monoschinos), el header NO
+  /// muestra el selector A-Z (su catálogo no usa ese filtro) y agrega un
+  /// badge indicando el proveedor activo. Para AV1/animeflv mantiene el
+  /// comportamiento histórico.
+  final bool isProviderScoped;
+
+  const _CatalogHeader({this.isProviderScoped = false});
 
   static const _letters = [
     '#',
@@ -563,7 +600,9 @@ class _SearchInputState extends State<_SearchInput> {
 }
 
 class _ProviderModeBadge extends StatelessWidget {
-  const _ProviderModeBadge();
+  final String label;
+
+  const _ProviderModeBadge({this.label = 'Modo HentaiLA activo'});
 
   @override
   Widget build(BuildContext context) {
@@ -582,7 +621,7 @@ class _ProviderModeBadge extends StatelessWidget {
           SizedBox(width: 8),
           Expanded(
             child: Text(
-              'Modo HentaiLA activo',
+              label,
               style: TextStyle(
                 fontSize: 12,
                 color: AppColors.textPrimary,

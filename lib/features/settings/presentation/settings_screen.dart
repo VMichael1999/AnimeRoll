@@ -136,14 +136,6 @@ class SettingsScreen extends ConsumerWidget {
                   onChanged: (v) =>
                       ref.read(darkThemePrefProvider.notifier).set(v),
                 ),
-                _SwitchRow(
-                  icon: Icons.bug_report_rounded,
-                  label: 'Modo debug',
-                  subtitle: 'DEBUG_DOWNLOAD',
-                  value: ref.watch(debugDownloadPrefProvider),
-                  onChanged: (v) =>
-                      ref.read(debugDownloadPrefProvider.notifier).set(v),
-                ),
                 _InfoRow(
                   icon: Icons.info_outline_rounded,
                   label: 'Versión',

@@ -21,6 +21,7 @@ class AvailableFilters {
   final List<FilterOption> types;
   final List<FilterOption> years;
   final List<FilterOption> sorts;
+  final bool uncensoredAvailable;
 
   const AvailableFilters({
     this.domain,
@@ -30,6 +31,7 @@ class AvailableFilters {
     this.types = const [],
     this.years = const [],
     this.sorts = const [],
+    this.uncensoredAvailable = false,
   });
 
   /// Empty fallback used when the backend hasn't responded yet (loading) or
@@ -53,6 +55,7 @@ class AvailableFilters {
       types: _list(json['types']),
       years: _list(json['years']),
       sorts: _list(json['sorts']),
+      uncensoredAvailable: json['uncensoredAvailable'] == true,
     );
   }
 }

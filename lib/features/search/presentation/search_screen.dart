@@ -10,7 +10,16 @@ import '../../settings/data/settings_provider.dart';
 import '../data/search_provider.dart';
 
 class SearchScreen extends ConsumerStatefulWidget {
-  const SearchScreen({super.key});
+  final String? initialMode;
+  final String? initialGenre;
+  final String? initialDomain;
+
+  const SearchScreen({
+    super.key,
+    this.initialMode,
+    this.initialGenre,
+    this.initialDomain,
+  });
 
   @override
   ConsumerState<SearchScreen> createState() => _SearchScreenState();
@@ -18,6 +27,33 @@ class SearchScreen extends ConsumerStatefulWidget {
 
 class _SearchScreenState extends ConsumerState<SearchScreen> {
   final _controller = TextEditingController();
+  bool _appliedInitialFilters = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _applyInitialFilters());
+  }
+
+  void _applyInitialFilters() {
+    if (!mounted || _appliedInitialFilters) return;
+    _appliedInitialFilters = true;
+
+    final genre = widget.initialGenre?.trim();
+    final domain = widget.initialDomain?.trim();
+    if (domain != null && domain.isNotEmpty) {
+      ref.read(providerPrefProvider.notifier).set(domain);
+    }
+    if (widget.initialMode == 'catalog' ||
+        (genre != null && genre.isNotEmpty)) {
+      ref.read(searchModeProvider.notifier).state = SearchMode.catalog;
+    }
+    if (genre != null && genre.isNotEmpty) {
+      ref.read(catalogLetterProvider.notifier).state = '#';
+      ref.read(catalogFiltersProvider.notifier).state = const CatalogFilters()
+          .copyWith(genre: genre);
+    }
+  }
 
   @override
   void dispose() {
@@ -1074,9 +1110,7 @@ class _CatalogFilterSheetState extends ConsumerState<_CatalogFilterSheet> {
   /// Convierte la lista de `FilterOption` del backend al formato `(value,
   /// label)` que entiende el dropdown.
   static List<({String value, String label})> _adapt(List<FilterOption> opts) =>
-      opts
-          .map((o) => (value: o.value, label: o.label))
-          .toList(growable: false);
+      opts.map((o) => (value: o.value, label: o.label)).toList(growable: false);
 
   late CatalogFilters _draft;
 
@@ -1090,7 +1124,8 @@ class _CatalogFilterSheetState extends ConsumerState<_CatalogFilterSheet> {
   Widget build(BuildContext context) {
     final filtersAsync = ref.watch(availableFiltersProvider(widget.domain));
     final filters = filtersAsync.valueOrNull ?? AvailableFilters.empty;
-    final isLoading = filtersAsync.isLoading && filtersAsync.valueOrNull == null;
+    final isLoading =
+        filtersAsync.isLoading && filtersAsync.valueOrNull == null;
 
     return Padding(
       padding: EdgeInsets.only(
@@ -1187,11 +1222,28 @@ class _CatalogFilterSheetState extends ConsumerState<_CatalogFilterSheet> {
                   ),
                 ),
               ),
+            if (filters.uncensoredAvailable)
+              CheckboxListTile(
+                value: _draft.uncensored,
+                onChanged: (value) => setState(
+                  () => _draft = _draft.copyWith(uncensored: value ?? false),
+                ),
+                contentPadding: EdgeInsets.zero,
+                dense: true,
+                controlAffinity: ListTileControlAffinity.leading,
+                title: const Text(
+                  'Sin censura',
+                  style: TextStyle(fontWeight: FontWeight.w700),
+                ),
+                activeColor: Theme.of(context).colorScheme.secondary,
+                checkColor: Colors.black,
+              ),
             if (filters.genres.isEmpty &&
                 filters.types.isEmpty &&
                 filters.statuses.isEmpty &&
                 filters.years.isEmpty &&
-                filters.sorts.isEmpty)
+                filters.sorts.isEmpty &&
+                !filters.uncensoredAvailable)
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 24),
                 child: Text(

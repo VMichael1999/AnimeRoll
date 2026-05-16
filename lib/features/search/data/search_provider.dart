@@ -43,6 +43,7 @@ class CatalogFilters {
   final String? year;
   final String? status;
   final String? sort;
+  final bool uncensored;
 
   const CatalogFilters({
     this.type,
@@ -50,6 +51,7 @@ class CatalogFilters {
     this.year,
     this.status,
     this.sort,
+    this.uncensored = false,
   });
 
   bool get isActive =>
@@ -57,7 +59,8 @@ class CatalogFilters {
       genre != null ||
       year != null ||
       status != null ||
-      sort != null;
+      sort != null ||
+      uncensored;
 
   CatalogFilters copyWith({
     String? type,
@@ -65,6 +68,7 @@ class CatalogFilters {
     String? year,
     String? status,
     String? sort,
+    bool? uncensored,
     bool clearType = false,
     bool clearGenre = false,
     bool clearYear = false,
@@ -77,6 +81,7 @@ class CatalogFilters {
       year: clearYear ? null : year ?? this.year,
       status: clearStatus ? null : status ?? this.status,
       sort: clearSort ? null : sort ?? this.sort,
+      uncensored: uncensored ?? this.uncensored,
     );
   }
 }
@@ -130,6 +135,7 @@ final catalogResultsProvider = FutureProvider.autoDispose<List<AnimeModel>>((
     year: filters.year,
     status: filters.status,
     sort: filters.sort,
+    uncensored: filters.uncensored,
     search: activeProvider == 'hentaila.com' ? query.trim() : null,
     limit: 60,
   );

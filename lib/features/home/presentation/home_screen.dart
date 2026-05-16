@@ -24,6 +24,7 @@ class HomeScreen extends ConsumerWidget {
     final genreAnime = ref.watch(genreAnimeProvider(selectedGenre));
     final popular = ref.watch(popularAnimeProvider);
     final latest = ref.watch(latestAnimeProvider);
+    final recentlyAdded = ref.watch(recentlyAddedAnimeProvider);
     final isHentaila = ref.watch(providerPrefProvider) == 'hentaila.com';
     final mainList = selectedGenre == 'Todo' ? popular : genreAnime;
 
@@ -80,9 +81,8 @@ class HomeScreen extends ConsumerWidget {
         slivers: [
           const SliverToBoxAdapter(child: _TopBar()),
           SliverToBoxAdapter(
-            child: mainList.when(
-              data: (list) =>
-                  _OverlappedCarousel(items: list.take(5).toList()),
+            child: popular.when(
+              data: (list) => _OverlappedCarousel(items: list.take(5).toList()),
               loading: () => const SizedBox(height: 260),
               error: (err, _) => const SizedBox(height: 260),
             ),
@@ -93,47 +93,45 @@ class HomeScreen extends ConsumerWidget {
           const SliverToBoxAdapter(child: _GenreFilter()),
           const SliverToBoxAdapter(child: SizedBox(height: 16)),
           const SliverToBoxAdapter(child: _ContinueWatching()),
-          const SliverToBoxAdapter(child: SizedBox(height: 16)),
-          SliverToBoxAdapter(
-            child: mainList.when(
-              data: (list) => _SpotlightSection(candidates: list),
-              loading: () => const SizedBox.shrink(),
-              error: (err, _) => const SizedBox.shrink(),
-            ),
-          ),
-          const SliverToBoxAdapter(child: SizedBox(height: 16)),
-          SliverToBoxAdapter(
-            child: mainList.when(
-              data: (list) => _AnimeRow(
-                title: isHentaila
-                    ? 'Hentai'
-                    : selectedGenre == 'Todo'
-                    ? 'Populares'
-                    : selectedGenre,
-                action: isHentaila ? 'Catalogo de Hentai' : 'Ver todo',
-                list: list,
-              ),
-              loading: () => const _HorizontalSkeleton(),
-              error: (err, _) => const SizedBox.shrink(),
-            ),
-          ),
-          if (selectedGenre == 'Todo')
-            SliverToBoxAdapter(
-              child: mainList.when(
-                data: (list) => _Top10Section(list: list),
-                loading: () => const SizedBox.shrink(),
-                error: (err, _) => const SizedBox.shrink(),
-              ),
-            ),
           if (selectedGenre == 'Todo') ...[
-            const SliverToBoxAdapter(child: SizedBox(height: 4)),
+            const SliverToBoxAdapter(child: SizedBox(height: 16)),
             SliverToBoxAdapter(
               child: latest.when(
                 data: (list) => _AnimeRow(
-                  title: isHentaila
-                      ? 'Episodios recientes'
-                      : 'Nuevos episodios',
-                  action: isHentaila ? '' : 'Ver todo',
+                  title: 'Episodios',
+                  subtitle: 'Recientemente Actualizado',
+                  action: 'Ver horario',
+                  actionRoute: '/schedule',
+                  list: list,
+                  landscape: true,
+                ),
+                loading: () => const _HorizontalSkeleton(landscape: true),
+                error: (err, _) => const SizedBox.shrink(),
+              ),
+            ),
+            const SliverToBoxAdapter(child: SizedBox(height: 4)),
+            SliverToBoxAdapter(
+              child: recentlyAdded.when(
+                data: (list) => _AnimeRow(
+                  title: 'Animes',
+                  subtitle: 'Recientemente Agregados',
+                  action: 'Catalogo de Animes',
+                  actionRoute: '/search?mode=catalog',
+                  list: list,
+                ),
+                loading: () => const _HorizontalSkeleton(),
+                error: (err, _) => const SizedBox.shrink(),
+              ),
+            ),
+          ] else ...[
+            const SliverToBoxAdapter(child: SizedBox(height: 16)),
+            SliverToBoxAdapter(
+              child: mainList.when(
+                data: (list) => _AnimeRow(
+                  title: selectedGenre,
+                  subtitle: 'Catalogo de Animes',
+                  action: 'Ver filtros',
+                  actionRoute: '/search?mode=catalog',
                   list: list,
                 ),
                 loading: () => const _HorizontalSkeleton(),
@@ -200,6 +198,193 @@ class _TopBar extends StatelessWidget {
 
 // ── Overlapped carousel ───────────────────────────────────────────────────────
 
+class _AnimeAv1Hero extends StatefulWidget {
+  final List<AnimeModel> items;
+
+  const _AnimeAv1Hero({required this.items});
+
+  @override
+  State<_AnimeAv1Hero> createState() => _AnimeAv1HeroState();
+}
+
+class _AnimeAv1HeroState extends State<_AnimeAv1Hero> {
+  final _controller = PageController();
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(const Duration(seconds: 7), (_) {
+      if (!mounted || widget.items.length <= 1 || !_controller.hasClients) {
+        return;
+      }
+      final current = (_controller.page ?? 0).round();
+      _controller.animateToPage(
+        (current + 1) % widget.items.length,
+        duration: const Duration(milliseconds: 420),
+        curve: Curves.easeOutCubic,
+      );
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.items.isEmpty) return const SizedBox(height: 260);
+    return SizedBox(
+      height: 300,
+      child: PageView.builder(
+        controller: _controller,
+        itemCount: widget.items.length,
+        itemBuilder: (context, index) =>
+            _AnimeAv1HeroSlide(anime: widget.items[index]),
+      ),
+    );
+  }
+}
+
+class _AnimeAv1HeroSlide extends StatelessWidget {
+  final AnimeModel anime;
+
+  const _AnimeAv1HeroSlide({required this.anime});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () =>
+          context.push('/detail?url=${Uri.encodeComponent(anime.url)}'),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          if (anime.cover != null)
+            CachedNetworkImage(
+              imageUrl: anime.cover!,
+              fit: BoxFit.cover,
+              placeholder: (context, _) =>
+                  ColoredBox(color: AppColors.surface2),
+              errorWidget: (context, url, _) =>
+                  ColoredBox(color: AppColors.surface2),
+            )
+          else
+            ColoredBox(color: AppColors.surface2),
+          DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                stops: const [0, 0.35, 1],
+                colors: [
+                  Colors.black.withValues(alpha: 0.05),
+                  Colors.black.withValues(alpha: 0.35),
+                  AppColors.bg,
+                ],
+              ),
+            ),
+          ),
+          Positioned(
+            left: 16,
+            right: 16,
+            bottom: 18,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  anime.title,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 28,
+                    height: 1.05,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  [
+                    if (anime.type != null) anime.type!,
+                    if (anime.year != null) anime.year!,
+                    if (anime.status != null) anime.status!,
+                  ].join(' • '),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: AppColors.textSecondary,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                if (anime.genres.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 7,
+                    runSpacing: 7,
+                    children: anime.genres
+                        .take(4)
+                        .map(
+                          (genre) => _HeroGenreChip(
+                            genre: genre,
+                            onTap: () => context.go(
+                              '/search?mode=catalog&domain=animeav1.com&genre=${Uri.encodeComponent(catalogGenreValue(genre))}',
+                            ),
+                          ),
+                        )
+                        .toList(),
+                  ),
+                ],
+                const SizedBox(height: 14),
+                FilledButton.icon(
+                  onPressed: () => context.push(
+                    '/detail?url=${Uri.encodeComponent(anime.url)}',
+                  ),
+                  icon: const Icon(Icons.play_arrow_rounded, size: 18),
+                  label: const Text('Ver Anime'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.accent,
+                    foregroundColor: Colors.white,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HeroGenreChip extends StatelessWidget {
+  final String genre;
+  final VoidCallback onTap;
+
+  const _HeroGenreChip({required this.genre, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+        decoration: BoxDecoration(
+          color: Colors.black.withValues(alpha: 0.45),
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.16)),
+        ),
+        child: Text(
+          genre,
+          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
+        ),
+      ),
+    );
+  }
+}
+
 class _OverlappedCarousel extends StatefulWidget {
   final List<AnimeModel> items;
   const _OverlappedCarousel({required this.items});
@@ -243,11 +428,13 @@ class _OverlappedCarouselState extends State<_OverlappedCarousel> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final w = constraints.maxWidth;
-        final visible = List.generate(widget.items.length, (i) => i)
-            .where((i) => (i - _current).abs() <= 2)
-            .toList()
-          ..sort((a, b) =>
-              (b - _current).abs().compareTo((a - _current).abs()));
+        final visible =
+            List.generate(
+              widget.items.length,
+              (i) => i,
+            ).where((i) => (i - _current).abs() <= 2).toList()..sort(
+              (a, b) => (b - _current).abs().compareTo((a - _current).abs()),
+            );
         return Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -303,9 +490,16 @@ class _OverlappedCarouselState extends State<_OverlappedCarousel> {
     final double nW = w * 0.43;
     final double fW = w * 0.33;
 
-    final double cardW = absDist == 0 ? cW : absDist == 1 ? nW : fW;
-    final double cardH =
-        absDist == 0 ? 240.0 : absDist == 1 ? 202.0 : 168.0;
+    final double cardW = absDist == 0
+        ? cW
+        : absDist == 1
+        ? nW
+        : fW;
+    final double cardH = absDist == 0
+        ? 240.0
+        : absDist == 1
+        ? 202.0
+        : 168.0;
 
     final double centerLeft = (w - cW) / 2;
     double left;
@@ -321,8 +515,16 @@ class _OverlappedCarouselState extends State<_OverlappedCarousel> {
       left = centerLeft + cW - nW * 0.38 + fW * 0.52;
     }
 
-    final double opacity = absDist == 0 ? 1.0 : absDist == 1 ? 0.55 : 0.25;
-    final double skewAngle = dist == 0 ? 0.0 : dist < 0 ? 0.18 : -0.18;
+    final double opacity = absDist == 0
+        ? 1.0
+        : absDist == 1
+        ? 0.55
+        : 0.25;
+    final double skewAngle = dist == 0
+        ? 0.0
+        : dist < 0
+        ? 0.18
+        : -0.18;
 
     return AnimatedPositioned(
       key: ValueKey(itemIdx),
@@ -334,8 +536,8 @@ class _OverlappedCarouselState extends State<_OverlappedCarousel> {
       height: cardH,
       child: GestureDetector(
         onTap: absDist == 0
-            ? () => context
-                .push('/detail?url=${Uri.encodeComponent(anime.url)}')
+            ? () =>
+                  context.push('/detail?url=${Uri.encodeComponent(anime.url)}')
             : () => _goTo(itemIdx),
         child: AnimatedOpacity(
           duration: const Duration(milliseconds: 350),
@@ -426,7 +628,9 @@ class _CarouselCard extends StatelessWidget {
                 children: [
                   Container(
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 8, vertical: 3),
+                      horizontal: 8,
+                      vertical: 3,
+                    ),
                     decoration: BoxDecoration(
                       color: AppColors.accent,
                       borderRadius: BorderRadius.circular(4),
@@ -459,7 +663,9 @@ class _CarouselCard extends StatelessWidget {
                         if (anime.year != null) anime.year!,
                       ].join(' · '),
                       style: const TextStyle(
-                          fontSize: 10, color: Color(0xAAFFFFFF)),
+                        fontSize: 10,
+                        color: Color(0xAAFFFFFF),
+                      ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -477,12 +683,17 @@ class _CarouselCard extends StatelessWidget {
                       ),
                       const SizedBox(width: 6),
                       _HeroButton(
-                          label: '+ Lista', filled: false, onTap: () {}),
+                        label: '+ Lista',
+                        filled: false,
+                        onTap: () {},
+                      ),
                       if (anime.score != null) ...[
                         const SizedBox(width: 6),
                         Container(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 7, vertical: 5),
+                            horizontal: 7,
+                            vertical: 5,
+                          ),
                           decoration: BoxDecoration(
                             color: AppColors.surface2.withValues(alpha: 0.85),
                             borderRadius: BorderRadius.circular(6),
@@ -491,14 +702,14 @@ class _CarouselCard extends StatelessWidget {
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              const Text('⭐',
-                                  style: TextStyle(fontSize: 9)),
+                              const Text('⭐', style: TextStyle(fontSize: 9)),
                               const SizedBox(width: 2),
                               Text(
                                 anime.score!.toStringAsFixed(1),
                                 style: const TextStyle(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w700),
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w700,
+                                ),
                               ),
                             ],
                           ),
@@ -1261,11 +1472,13 @@ class _SpotlightPill extends StatelessWidget {
 
 class _HomeSectionHeader extends StatelessWidget {
   final String title;
+  final String? subtitle;
   final String? action;
   final VoidCallback? onAction;
 
   const _HomeSectionHeader({
     required this.title,
+    this.subtitle,
     this.action,
     this.onAction,
   });
@@ -1290,10 +1503,28 @@ class _HomeSectionHeader extends StatelessWidget {
           ),
           const SizedBox(width: 8),
           Expanded(
-            child: Text(
-              title,
-              style: const TextStyle(
-                  fontSize: 15, fontWeight: FontWeight.w900),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                if (subtitle != null) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle!,
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: AppColors.accent2,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ],
+              ],
             ),
           ),
           if (action != null)
@@ -1316,6 +1547,7 @@ class _HomeSectionHeader extends StatelessWidget {
 
 // ── Top 10 ────────────────────────────────────────────────────────────────────
 
+// ignore: unused_element
 class _Top10Section extends StatelessWidget {
   final List<AnimeModel> list;
   const _Top10Section({required this.list});
@@ -1403,9 +1635,10 @@ class _Top10Card extends StatelessWidget {
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w700,
-                    height: 1.3),
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  height: 1.3,
+                ),
               ),
             ),
           ],
@@ -1419,10 +1652,20 @@ class _Top10Card extends StatelessWidget {
 
 class _AnimeRow extends ConsumerWidget {
   final String title;
+  final String? subtitle;
   final String? action;
+  final String? actionRoute;
   final List<AnimeModel> list;
+  final bool landscape;
 
-  const _AnimeRow({required this.title, required this.list, this.action});
+  const _AnimeRow({
+    required this.title,
+    required this.list,
+    this.subtitle,
+    this.action,
+    this.actionRoute,
+    this.landscape = false,
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -1433,8 +1676,9 @@ class _AnimeRow extends ConsumerWidget {
       children: [
         _HomeSectionHeader(
           title: title,
+          subtitle: subtitle,
           action: action == '' ? null : action ?? 'Ver todo',
-          onAction: () => context.go('/search'),
+          onAction: () => context.go(actionRoute ?? '/search?mode=catalog'),
         ),
         const SizedBox(height: 10),
         if (layout == 'list')
@@ -1448,18 +1692,20 @@ class _AnimeRow extends ConsumerWidget {
           )
         else
           SizedBox(
-            height: 190,
+            height: landscape ? 150 : 190,
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.symmetric(horizontal: 16),
               itemCount: list.length,
               separatorBuilder: (context, _) => const SizedBox(width: 10),
-              itemBuilder: (context, i) => AnimeCard(
-                anime: list[i],
-                onTap: () => context.push(
-                  '/detail?url=${Uri.encodeComponent(list[i].url)}',
-                ),
-              ),
+              itemBuilder: (context, i) => landscape
+                  ? _EpisodeUpdateCard(anime: list[i])
+                  : AnimeCard(
+                      anime: list[i],
+                      onTap: () => context.push(
+                        '/detail?url=${Uri.encodeComponent(list[i].url)}',
+                      ),
+                    ),
             ),
           ),
       ],
@@ -1545,6 +1791,60 @@ class _HomeListTile extends StatelessWidget {
 }
 
 // ── Loading skeleton ──────────────────────────────────────────────────────────
+
+class _EpisodeUpdateCard extends StatelessWidget {
+  final AnimeModel anime;
+
+  const _EpisodeUpdateCard({required this.anime});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () =>
+          context.push('/detail?url=${Uri.encodeComponent(anime.url)}'),
+      child: SizedBox(
+        width: 190,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: AspectRatio(
+                aspectRatio: 16 / 9,
+                child: anime.cover == null
+                    ? ColoredBox(color: AppColors.surface2)
+                    : CachedNetworkImage(
+                        imageUrl: anime.cover!,
+                        fit: BoxFit.cover,
+                        errorWidget: (context, url, _) =>
+                            ColoredBox(color: AppColors.surface2),
+                      ),
+              ),
+            ),
+            const SizedBox(height: 7),
+            Text(
+              anime.type ?? 'Episodio',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: AppColors.accent2,
+                fontSize: 11,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 3),
+            Text(
+              anime.title,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
 
 class _HentailaGridSection extends ConsumerWidget {
   final String title;
@@ -1790,12 +2090,14 @@ class _HentailaGridSkeleton extends StatelessWidget {
 }
 
 class _HorizontalSkeleton extends StatelessWidget {
-  const _HorizontalSkeleton();
+  final bool landscape;
+
+  const _HorizontalSkeleton({this.landscape = false});
 
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: 190,
+      height: landscape ? 150 : 190,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -1804,8 +2106,8 @@ class _HorizontalSkeleton extends StatelessWidget {
         itemBuilder: (context, _) => Column(
           children: [
             Container(
-              width: 100,
-              height: 138,
+              width: landscape ? 190 : 100,
+              height: landscape ? 107 : 138,
               decoration: BoxDecoration(
                 color: AppColors.surface2,
                 borderRadius: BorderRadius.circular(10),

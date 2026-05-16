@@ -25,7 +25,14 @@ final appRouter = GoRouter(
           path: '/schedule',
           builder: (context, _) => const ScheduleScreen(),
         ),
-        GoRoute(path: '/search', builder: (context, _) => const SearchScreen()),
+        GoRoute(
+          path: '/search',
+          builder: (context, state) => SearchScreen(
+            initialMode: state.uri.queryParameters['mode'],
+            initialGenre: state.uri.queryParameters['genre'],
+            initialDomain: state.uri.queryParameters['domain'],
+          ),
+        ),
         GoRoute(
           path: '/favorites',
           builder: (context, _) => const FavoritesScreen(),

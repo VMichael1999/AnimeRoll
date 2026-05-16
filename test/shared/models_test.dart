@@ -1,4 +1,5 @@
 import 'package:anime_roll/shared/models/anime_model.dart';
+import 'package:anime_roll/shared/models/available_filters.dart';
 import 'package:anime_roll/shared/models/download_model.dart';
 import 'package:anime_roll/shared/models/episode_model.dart';
 import 'package:anime_roll/shared/models/schedule_anime_model.dart';
@@ -69,6 +70,31 @@ void main() {
       expect(server.name, 'HLS');
       expect(server.variant, 'SUB');
       expect(server.isHls, isTrue);
+    });
+  });
+
+  group('AvailableFilters', () {
+    test('parses list filters and boolean availability', () {
+      final filters = AvailableFilters.fromJson({
+        'domain': 'hentaila.com',
+        'provider': 'hentaila',
+        'genres': [
+          {'value': 'ahegao', 'label': 'Ahegao'},
+        ],
+        'years': [
+          {'value': '2026', 'label': '2026'},
+        ],
+        'statuses': [
+          {'value': 'emision', 'label': 'En emision'},
+        ],
+        'uncensoredAvailable': true,
+      });
+
+      expect(filters.domain, 'hentaila.com');
+      expect(filters.genres.single.value, 'ahegao');
+      expect(filters.years.single.label, '2026');
+      expect(filters.statuses.single.value, 'emision');
+      expect(filters.uncensoredAvailable, isTrue);
     });
   });
 

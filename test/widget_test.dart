@@ -10,6 +10,7 @@ void main() {
         overrides: [
           popularAnimeProvider.overrideWith((ref) async => []),
           latestAnimeProvider.overrideWith((ref) async => []),
+          recentlyAddedAnimeProvider.overrideWith((ref) async => []),
         ],
         child: const App(),
       ),

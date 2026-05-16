@@ -60,7 +60,13 @@ void main() {
       final mood = await repo.moodSearch('calm', domain: 'animeav1.com');
       expect(mood.single.match, 96);
       expect(mood.single.reason, 'Calm fantasy');
-      expect((await repo.catalog()).single.url, 'catalog-url');
+      expect(
+        (await repo.catalog(
+          domain: 'hentaila.com',
+          uncensored: true,
+        )).single.url,
+        'catalog-url',
+      );
       expect((await repo.schedule(day: 1)).single.episodeUrl, 'ep-url');
     });
 

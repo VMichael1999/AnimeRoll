@@ -214,6 +214,7 @@ class _Repo extends AnimeRepository {
     String? year,
     String? status,
     String? sort,
+    bool uncensored = false,
     String? search,
     int limit = 40,
   }) async => const [
@@ -241,7 +242,7 @@ class _Repo extends AnimeRepository {
   ];
 
   @override
-  Future<List<ScheduleAnimeModel>> schedule({required int day}) async => [
+  Future<List<ScheduleAnimeModel>> schedule({int? day}) async => [
     ScheduleAnimeModel(
       title: 'Frieren',
       url: 'anime-url',

@@ -11,6 +11,7 @@ import '../data/detail_provider.dart';
 import '../../downloads/data/downloads_provider.dart';
 import '../../downloads/presentation/download_server_sheet.dart';
 import '../../favorites/data/favorites_provider.dart';
+import '../../home/data/home_provider.dart';
 import '../../settings/data/settings_provider.dart';
 
 class DetailScreen extends ConsumerWidget {
@@ -199,7 +200,14 @@ class _DetailInfo extends ConsumerWidget {
             Wrap(
               spacing: 6,
               runSpacing: 6,
-              children: anime.genres.map((g) => _GenreTag(label: g)).toList(),
+              children: anime.genres
+                  .map(
+                    (g) => _GenreTag(
+                      label: g,
+                      onTap: () => _openGenreCatalog(context, anime, g),
+                    ),
+                  )
+                  .toList(),
             ),
           const SizedBox(height: 14),
           Row(
@@ -463,23 +471,44 @@ class _Stat extends StatelessWidget {
 
 class _GenreTag extends StatelessWidget {
   final String label;
-  const _GenreTag({required this.label});
+  final VoidCallback? onTap;
+
+  const _GenreTag({required this.label, this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-      decoration: BoxDecoration(
-        color: AppColors.surface2,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(fontSize: 10, color: AppColors.textSecondary),
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+        decoration: BoxDecoration(
+          color: AppColors.surface2,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: onTap == null ? AppColors.border : AppColors.accent2,
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 10,
+            color: onTap == null ? AppColors.textSecondary : AppColors.accent2,
+            fontWeight: onTap == null ? FontWeight.w500 : FontWeight.w700,
+          ),
+        ),
       ),
     );
   }
+}
+
+void _openGenreCatalog(BuildContext context, AnimeModel anime, String genre) {
+  final domain = Uri.tryParse(anime.url)?.host.contains('hentaila') == true
+      ? 'hentaila.com'
+      : 'animeav1.com';
+  context.go(
+    '/search?mode=catalog&domain=$domain&genre=${Uri.encodeComponent(catalogGenreValue(genre))}',
+  );
 }
 
 class _IconAction extends StatelessWidget {

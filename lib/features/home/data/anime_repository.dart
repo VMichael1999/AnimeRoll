@@ -96,6 +96,7 @@ class AnimeRepository {
     String? year,
     String? status,
     String? sort,
+    bool uncensored = false,
     String? search,
     int limit = 40,
   }) async {
@@ -109,6 +110,7 @@ class AnimeRepository {
         'year': year,
         'status': status,
         'sort': sort,
+        'uncensored': uncensored ? true : null,
         'search': search,
         'limit': limit,
       }..removeWhere((_, v) => v == null || v == ''),
@@ -156,10 +158,11 @@ class AnimeRepository {
     );
   }
 
-  Future<List<ScheduleAnimeModel>> schedule({required int day}) async {
+  Future<List<ScheduleAnimeModel>> schedule({int? day}) async {
     final response = await _dio.get(
       '/anime/schedule',
-      queryParameters: {'domain': 'animeav1.com', 'day': day},
+      queryParameters: {'domain': 'animeav1.com', 'day': day}
+        ..removeWhere((_, v) => v == null),
     );
     final data = _responseData(response);
     final results = data['results'];

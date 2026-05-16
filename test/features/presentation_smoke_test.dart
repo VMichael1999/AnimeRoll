@@ -70,6 +70,7 @@ void main() {
         overrides: [
           popularAnimeProvider.overrideWith((ref) async => [anime, animeTwo]),
           latestAnimeProvider.overrideWith((ref) async => [animeTwo]),
+          recentlyAddedAnimeProvider.overrideWith((ref) async => [animeTwo]),
           genreAnimeProvider.overrideWith((ref, genre) async => [anime]),
           providerPrefProvider.overrideWith(
             (ref) => _StringNotifier('animeav1.com'),
@@ -88,6 +89,7 @@ void main() {
         overrides: [
           popularAnimeProvider.overrideWith((ref) async => [anime]),
           latestAnimeProvider.overrideWith((ref) async => [animeTwo]),
+          recentlyAddedAnimeProvider.overrideWith((ref) async => [anime]),
           genreAnimeProvider.overrideWith((ref, genre) async => [anime]),
           providerPrefProvider.overrideWith(
             (ref) => _StringNotifier('hentaila.com'),

@@ -59,6 +59,22 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   String? _lastMarathonEpisodeKey;
   bool _breakModalShown = false;
 
+  // Mutable shadows of the widget's constructor args. We start from the values
+  // passed in, but `_switchToEpisode` updates these in place so a "next
+  // episode" press doesn't tear down the whole screen (Crunchyroll-style: the
+  // player and chrome stay, only the URL+title swap).
+  late String _episodeUrl;
+  late String _episodeTitle;
+  late String _animeUrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _episodeUrl = widget.episodeUrl;
+    _episodeTitle = widget.title;
+    _animeUrl = widget.animeUrl;
+  }
+
   @override
   void dispose() {
     _sleepTimer?.cancel();
@@ -147,7 +163,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   Future<void> _seekToSavedPosition(BetterPlayerController controller) async {
     final entry = ref
         .read(watchHistoryProvider.notifier)
-        .find(widget.episodeUrl);
+        .find(_episodeUrl);
     if (entry == null || entry.completed) return;
     final position = Duration(milliseconds: entry.positionMs);
     final duration =
@@ -201,7 +217,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       return;
     }
     final position = video.value.position;
-    final key = widget.episodeUrl;
+    final key = _episodeUrl;
     final previous = _lastMarathonEpisodeKey == key
         ? _lastMarathonPosition
         : null;
@@ -249,18 +265,18 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
 
     final detail = _latestDetail;
     final episode = detail?.episodes
-        .where((item) => item.url == widget.episodeUrl)
+        .where((item) => item.url == _episodeUrl)
         .firstOrNull;
-    final animeUrl = widget.animeUrl.isNotEmpty
-        ? widget.animeUrl
-        : detail?.anime.url ?? _inferAnimeUrl(widget.episodeUrl);
+    final animeUrl = _animeUrl.isNotEmpty
+        ? _animeUrl
+        : detail?.anime.url ?? _inferAnimeUrl(_episodeUrl);
     unawaited(
       ref
           .read(watchHistoryProvider.notifier)
           .upsertProgress(
-            episodeUrl: widget.episodeUrl,
-            episodeTitle: episode?.title ?? widget.title,
-            animeTitle: detail?.anime.title ?? widget.title.split('·').first,
+            episodeUrl: _episodeUrl,
+            episodeTitle: episode?.title ?? _episodeTitle,
+            animeTitle: detail?.anime.title ?? _episodeTitle.split('·').first,
             animeUrl: animeUrl,
             thumbnail: episode?.thumbnail ?? detail?.anime.cover,
             episodeNumber: episode?.number,
@@ -659,7 +675,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final serversAsync = ref.watch(serversProvider(widget.episodeUrl));
+    final serversAsync = ref.watch(serversProvider(_episodeUrl));
     final selectedIndex = ref.watch(selectedServerProvider);
     final selectedServerUrl = ref.watch(selectedServerUrlProvider);
     final marathon = ref.watch(marathonProvider);
@@ -674,9 +690,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         });
       }
     });
-    final animeUrl = widget.animeUrl.isNotEmpty
-        ? widget.animeUrl
-        : _inferAnimeUrl(widget.episodeUrl);
+    final animeUrl = _animeUrl.isNotEmpty
+        ? _animeUrl
+        : _inferAnimeUrl(_episodeUrl);
     final detailAsync = animeUrl.isEmpty
         ? null
         : ref.watch(animeDetailProvider(animeUrl));
@@ -754,59 +770,72 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
           Expanded(
             child: Container(
               color: AppColors.bg,
-              child: serversAsync.when(
-                data: (servers) => _PlayerInfo(
-                  title: widget.title,
-                  episodeUrl: widget.episodeUrl,
-                  animeUrl: animeUrl,
-                  servers: servers,
-                  selectedIndex: selectedServerUrl == null
-                      ? selectedIndex.clamp(0, servers.length - 1)
-                      : servers
-                            .indexWhere(
-                              (server) =>
-                                  _playbackUrl(server.url) ==
-                                  selectedServerUrl,
-                            )
-                            .clamp(0, servers.length - 1),
-                  detailAsync: detailAsync,
-                  onPiP: _enterPiP,
-                  sleepTimerRemaining: _sleepTimerRemaining,
-                  onSetSleepTimer: _setSleepTimer,
-                  onCancelSleepTimer: _cancelSleepTimer,
-                  formatSleepTimer: _formatSleepTimer,
-                  marathon: marathon,
-                  onResetMarathon: () =>
-                      ref.read(marathonProvider.notifier).reset(),
-                  onServerSelect: (i) {
-                    ref
-                        .read(preferredPlaybackServerProvider.notifier)
-                        .set(servers[i].name);
-                    ref.read(selectedServerProvider.notifier).state = i;
-                    ref.read(selectedServerUrlProvider.notifier).state =
-                        _playbackUrl(servers[i].url);
-                    _resetMarathonTick();
-                    _saveCurrentProgress(force: true);
-                    final controller = _bpController;
-                    _bpController = null;
-                    _activeVideoUrl = null;
-                    _initializingVideoUrl = null;
-                    _playerError = null;
-                    controller?.removeEventsListener(_onPlayerEvent);
-                    controller?.dispose();
-                    if (_isDirectVideoUrl(servers[i].url)) {
-                      _initPlayer(servers[i]);
-                    } else {
-                      setState(() {});
+              // Crunchyroll-style: keep the info panel visible during episode
+              // switches. We render with whichever servers we have — fresh data
+              // when available, otherwise the previous episode's cached list
+              // (`_lastServers`). The video area above shows its own spinner
+              // for the actual transition; the panel never flashes empty.
+              child: Builder(
+                builder: (context) {
+                  final servers = serversAsync.valueOrNull ?? _lastServers;
+                  if (servers.isEmpty) {
+                    if (serversAsync.hasError) {
+                      return ErrorView(
+                        message: 'Error al cargar servidores',
+                        onRetry: () =>
+                            ref.invalidate(serversProvider(_episodeUrl)),
+                      );
                     }
-                  },
-                ),
-                loading: () => const SizedBox.shrink(),
-                error: (e, _) => ErrorView(
-                  message: 'Error al cargar servidores',
-                  onRetry: () =>
-                      ref.invalidate(serversProvider(widget.episodeUrl)),
-                ),
+                    return const SizedBox.shrink();
+                  }
+                  return _PlayerInfo(
+                    title: _episodeTitle,
+                    episodeUrl: _episodeUrl,
+                    animeUrl: animeUrl,
+                    servers: servers,
+                    selectedIndex: selectedServerUrl == null
+                        ? selectedIndex.clamp(0, servers.length - 1)
+                        : servers
+                              .indexWhere(
+                                (server) =>
+                                    _playbackUrl(server.url) ==
+                                    selectedServerUrl,
+                              )
+                              .clamp(0, servers.length - 1),
+                    detailAsync: detailAsync,
+                    onPiP: _enterPiP,
+                    sleepTimerRemaining: _sleepTimerRemaining,
+                    onSetSleepTimer: _setSleepTimer,
+                    onCancelSleepTimer: _cancelSleepTimer,
+                    formatSleepTimer: _formatSleepTimer,
+                    marathon: marathon,
+                    onResetMarathon: () =>
+                        ref.read(marathonProvider.notifier).reset(),
+                    onSwitchEpisode: _switchToEpisode,
+                    onServerSelect: (i) {
+                      ref
+                          .read(preferredPlaybackServerProvider.notifier)
+                          .set(servers[i].name);
+                      ref.read(selectedServerProvider.notifier).state = i;
+                      ref.read(selectedServerUrlProvider.notifier).state =
+                          _playbackUrl(servers[i].url);
+                      _resetMarathonTick();
+                      _saveCurrentProgress(force: true);
+                      final controller = _bpController;
+                      _bpController = null;
+                      _activeVideoUrl = null;
+                      _initializingVideoUrl = null;
+                      _playerError = null;
+                      controller?.removeEventsListener(_onPlayerEvent);
+                      controller?.dispose();
+                      if (_isDirectVideoUrl(servers[i].url)) {
+                        _initPlayer(servers[i]);
+                      } else {
+                        setState(() {});
+                      }
+                    },
+                  );
+                },
               ),
             ),
           ),
@@ -829,7 +858,60 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     final parentSegments = uri.pathSegments.take(uri.pathSegments.length - 1);
     return uri.replace(pathSegments: parentSegments).toString();
   }
+
+  /// In-place episode switch (Crunchyroll-style).
+  ///
+  /// Instead of `pushReplacement`-ing a fresh PlayerScreen — which tears down
+  /// the whole widget tree, the WebView, the BetterPlayer, the toolbar — we
+  /// keep this State alive and just swap the data: save the old progress,
+  /// dispose the controller cleanly, reset transient playback flags,
+  /// invalidate the old `serversProvider`, and `setState` to the new URL/title.
+  /// The next build re-watches `serversProvider(new url)` and re-inits the
+  /// player exactly as on first entry, but the surrounding chrome (header,
+  /// controls, scaffold) never disappears.
+  void _switchToEpisode(String animeUrl, EpisodeModel episode) {
+    if (episode.url == _episodeUrl) return;
+
+    _saveCurrentProgress(force: true);
+
+    final previousController = _bpController;
+    previousController?.removeEventsListener(_onPlayerEvent);
+    previousController?.dispose();
+
+    final oldUrl = _episodeUrl;
+
+    setState(() {
+      _bpController = null;
+      _activeVideoUrl = null;
+      _initializingVideoUrl = null;
+      _playerError = null;
+      // NOTE: do NOT clear _lastServers here. Crunchyroll-style UX keeps the
+      // previous episode's info/server-list visible while the new episode
+      // fetches; clearing them causes the whole info panel to flash empty
+      // ("loading screen feeling"). The next successful fetch overwrites
+      // _lastServers with fresh data inside the build callback.
+      _lastMarathonPosition = null;
+      _lastMarathonEpisodeKey = null;
+      _lastHistorySaveAt = null;
+      _breakModalShown = false;
+      _episodeUrl = episode.url;
+      _episodeTitle = episode.title;
+      _animeUrl = animeUrl.isNotEmpty ? animeUrl : _animeUrl;
+      // Reset selected server so the new episode picks its first server, not
+      // whatever index was selected for the previous one.
+      ref.read(selectedServerProvider.notifier).state = 0;
+      ref.read(selectedServerUrlProvider.notifier).state = null;
+    });
+
+    // Drop the old episode's provider so we don't keep a stale listener.
+    ref.invalidate(serversProvider(oldUrl));
+  }
 }
+
+/// Callback used by every episode picker (prev/next, grid, hentaila list) to
+/// trigger an in-place swap on the parent [_PlayerScreenState].
+typedef SwitchEpisodeCallback =
+    void Function(String animeUrl, EpisodeModel episode);
 
 class _PlayerInfo extends ConsumerWidget {
   final String title;
@@ -846,6 +928,7 @@ class _PlayerInfo extends ConsumerWidget {
   final MarathonSession marathon;
   final VoidCallback onResetMarathon;
   final ValueChanged<int> onServerSelect;
+  final SwitchEpisodeCallback onSwitchEpisode;
 
   const _PlayerInfo({
     required this.title,
@@ -860,6 +943,7 @@ class _PlayerInfo extends ConsumerWidget {
     required this.formatSleepTimer,
     required this.marathon,
     required this.onResetMarathon,
+    required this.onSwitchEpisode,
     this.onPiP,
     this.sleepTimerRemaining,
   });
@@ -1130,7 +1214,11 @@ class _PlayerInfo extends ConsumerWidget {
           ],
           MarathonHud(session: marathon, onReset: onResetMarathon),
           if (marathon.isActive) const SizedBox(height: 16),
-          _EpisodeNavigation(episodeUrl: episodeUrl, detailAsync: detailAsync),
+          _EpisodeNavigation(
+            episodeUrl: episodeUrl,
+            detailAsync: detailAsync,
+            onSwitchEpisode: onSwitchEpisode,
+          ),
           const SizedBox(height: 16),
           const Text(
             'Servidores',
@@ -1143,7 +1231,11 @@ class _PlayerInfo extends ConsumerWidget {
             onServerSelect: onServerSelect,
           ),
           const SizedBox(height: 22),
-          _EpisodeGridPanel(episodeUrl: episodeUrl, detailAsync: detailAsync),
+          _EpisodeGridPanel(
+            episodeUrl: episodeUrl,
+            detailAsync: detailAsync,
+            onSwitchEpisode: onSwitchEpisode,
+          ),
           const SizedBox(height: 22),
           _AnimeEpisodeInfo(title: title, detailAsync: detailAsync),
         ],
@@ -1548,10 +1640,12 @@ class _TypingDotsState extends State<_TypingDots>
 class _EpisodeNavigation extends StatelessWidget {
   final String episodeUrl;
   final AsyncValue<AnimeDetailData>? detailAsync;
+  final SwitchEpisodeCallback onSwitchEpisode;
 
   const _EpisodeNavigation({
     required this.episodeUrl,
     required this.detailAsync,
+    required this.onSwitchEpisode,
   });
 
   @override
@@ -1610,9 +1704,7 @@ class _EpisodeNavigation extends StatelessWidget {
     String animeUrl,
     EpisodeModel episode,
   ) {
-    context.pushReplacement(
-      '/player?url=${Uri.encodeComponent(episode.url)}&title=${Uri.encodeComponent(episode.title)}&animeUrl=${Uri.encodeComponent(animeUrl)}',
-    );
+    onSwitchEpisode(animeUrl, episode);
   }
 }
 
@@ -1672,10 +1764,12 @@ class _EpisodeNavButton extends StatelessWidget {
 class _EpisodeGridPanel extends StatefulWidget {
   final String episodeUrl;
   final AsyncValue<AnimeDetailData>? detailAsync;
+  final SwitchEpisodeCallback onSwitchEpisode;
 
   const _EpisodeGridPanel({
     required this.episodeUrl,
     required this.detailAsync,
+    required this.onSwitchEpisode,
   });
 
   @override
@@ -1702,6 +1796,7 @@ class _EpisodeGridPanelState extends State<_EpisodeGridPanel> {
             anime: data.anime,
             episodes: episodes,
             episodeUrl: widget.episodeUrl,
+            onSwitchEpisode: widget.onSwitchEpisode,
           );
         }
 
@@ -1865,9 +1960,7 @@ class _EpisodeGridPanelState extends State<_EpisodeGridPanel> {
     String animeUrl,
     EpisodeModel episode,
   ) {
-    context.pushReplacement(
-      '/player?url=${Uri.encodeComponent(episode.url)}&title=${Uri.encodeComponent(episode.title)}&animeUrl=${Uri.encodeComponent(animeUrl)}',
-    );
+    widget.onSwitchEpisode(animeUrl, episode);
   }
 }
 
@@ -1913,11 +2006,13 @@ class _HentailaEpisodeListPanel extends StatelessWidget {
   final AnimeModel anime;
   final List<EpisodeModel> episodes;
   final String episodeUrl;
+  final SwitchEpisodeCallback onSwitchEpisode;
 
   const _HentailaEpisodeListPanel({
     required this.anime,
     required this.episodes,
     required this.episodeUrl,
+    required this.onSwitchEpisode,
   });
 
   @override
@@ -1964,9 +2059,7 @@ class _HentailaEpisodeListPanel extends StatelessWidget {
                   anime: anime,
                   episode: episode,
                   active: active,
-                  onTap: () => context.pushReplacement(
-                    '/player?url=${Uri.encodeComponent(episode.url)}&title=${Uri.encodeComponent(episode.title)}&animeUrl=${Uri.encodeComponent(anime.url)}',
-                  ),
+                  onTap: () => onSwitchEpisode(anime.url, episode),
                 );
               },
             ),

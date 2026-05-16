@@ -16,7 +16,7 @@ class AppConstants {
     'animeav1.com',
     'tioanime.com',
     'jkanime.net',
-    'monoschinos2.com',
+    'monoschinos2.net',
     'hentaila.com',
   ];
 

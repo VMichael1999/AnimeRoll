@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../shared/models/anime_model.dart';
+import '../../../shared/models/available_filters.dart';
 import '../../home/data/anime_repository.dart';
 import '../../home/data/home_provider.dart';
 import '../../settings/data/settings_provider.dart';
@@ -103,6 +104,15 @@ final searchResultsProvider = FutureProvider.autoDispose<List<AnimeModel>>((
   }
   return repo.search(query.trim(), domain: domain);
 });
+
+/// Fetcha del backend los filtros disponibles para el proveedor dado.
+/// Devuelve solo lo que el sitio realmente soporta (ej. AnimeAV1 expone
+/// genero + estado, ignora tipo/año/orden).
+final availableFiltersProvider = FutureProvider.autoDispose
+    .family<AvailableFilters, String>((ref, domain) async {
+      final repo = ref.read(animeRepositoryProvider);
+      return repo.availableFilters(domain: domain);
+    });
 
 final catalogResultsProvider = FutureProvider.autoDispose<List<AnimeModel>>((
   ref,

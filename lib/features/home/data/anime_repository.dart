@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import '../../../core/network/dio_client.dart';
 import '../../../shared/models/anime_model.dart';
+import '../../../shared/models/available_filters.dart';
 import '../../../shared/models/download_model.dart';
 import '../../../shared/models/episode_model.dart';
 import '../../../shared/models/schedule_anime_model.dart';
@@ -12,7 +13,7 @@ class AnimeRepository {
 
   static const List<String> imageFirstDomains = [
     'animeav1.com',
-    'monoschinos2.com',
+    'monoschinos2.net',
     'tioanime.com',
     'jkanime.net',
     'animeflv.net',
@@ -71,6 +72,20 @@ class AnimeRepository {
       }..removeWhere((_, v) => v == null),
     );
     return AiRecapResult.fromJson(_responseData(response));
+  }
+
+  /// Pide al backend la lista canonica de filtros que SI funcionan en el
+  /// proveedor indicado. Devuelve solo categorias con opciones, p.ej. para
+  /// AnimeAV1 vienen 46 generos + 3 estados; tipos/años/orden llegan vacios
+  /// porque el sitio los ignora server-side.
+  Future<AvailableFilters> availableFilters({
+    String domain = 'animeav1.com',
+  }) async {
+    final response = await _dio.get(
+      '/anime/filters',
+      queryParameters: {'domain': domain},
+    );
+    return AvailableFilters.fromJson(_responseData(response));
   }
 
   Future<List<AnimeModel>> catalog({

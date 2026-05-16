@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../shared/models/anime_model.dart';
+import '../../../shared/models/available_filters.dart';
 import '../../../shared/widgets/error_view.dart';
 import '../../home/data/anime_repository.dart';
 import '../../settings/data/settings_provider.dart';
@@ -568,7 +569,7 @@ class _ProviderFilter extends ConsumerWidget {
   static const _labels = <String?, String>{
     null: 'Todos',
     'animeav1.com': 'AnimeAV1',
-    'monoschinos2.com': 'MonosChinos',
+    'monoschinos2.net': 'MonosChinos',
     'tioanime.com': 'TioAnime',
     'jkanime.net': 'JKAnime',
     'animeflv.net': 'AnimeFLV',
@@ -1030,7 +1031,12 @@ class _NoResults extends StatelessWidget {
 }
 
 void _showCatalogFilters(BuildContext context, WidgetRef ref) {
-  final isHentaila = ref.read(providerPrefProvider) == 'hentaila.com';
+  final activeProvider = ref.read(providerPrefProvider);
+  // Domain que se manda al backend para pedir filtros. Mismo que usa el
+  // catalog: si el usuario eligio hentaila, hentaila; si no, animeav1.
+  final domain = activeProvider == 'hentaila.com'
+      ? 'hentaila.com'
+      : 'animeav1.com';
   showModalBottomSheet<void>(
     context: context,
     backgroundColor: AppColors.surface,
@@ -1040,7 +1046,7 @@ void _showCatalogFilters(BuildContext context, WidgetRef ref) {
     ),
     builder: (_) => _CatalogFilterSheet(
       initialFilters: ref.read(catalogFiltersProvider),
-      isHentaila: isHentaila,
+      domain: domain,
       onApply: (filters) {
         ref.read(catalogFiltersProvider.notifier).state = filters;
       },
@@ -1048,68 +1054,29 @@ void _showCatalogFilters(BuildContext context, WidgetRef ref) {
   );
 }
 
-class _CatalogFilterSheet extends StatefulWidget {
+class _CatalogFilterSheet extends ConsumerStatefulWidget {
   final CatalogFilters initialFilters;
-  final bool isHentaila;
+  final String domain;
   final ValueChanged<CatalogFilters> onApply;
 
   const _CatalogFilterSheet({
     required this.initialFilters,
-    required this.isHentaila,
+    required this.domain,
     required this.onApply,
   });
 
   @override
-  State<_CatalogFilterSheet> createState() => _CatalogFilterSheetState();
+  ConsumerState<_CatalogFilterSheet> createState() =>
+      _CatalogFilterSheetState();
 }
 
-class _CatalogFilterSheetState extends State<_CatalogFilterSheet> {
-  static const _types = ['TV Anime', 'Película', 'OVA', 'ONA', 'Especial'];
-  static const _genres = [
-    'Acción',
-    'Aventura',
-    'Comedia',
-    'Drama',
-    'Fantasía',
-    'Romance',
-    'Shounen',
-    'Slice of Life',
-  ];
-  static const _hentailaTypes = ['OVA'];
-  static const _hentailaGenres = [
-    '3D',
-    'Ahegao',
-    'Anal',
-    'Casadas',
-    'Chikan',
-    'Ecchi',
-    'Enfermeras',
-    'Escolares',
-    'Futanari',
-    'Gore',
-    'Hardcore',
-    'Harem',
-    'Incesto',
-    'Juegos Sexuales',
-    'Suspenso',
-    'Milfs',
-    'Maids',
-    'Netorare',
-    'Ninfomania',
-    'Ninjas',
-    'Orgias',
-    'Romance',
-    'Shota',
-    'Softcore',
-    'Succubus',
-    'Teacher',
-    'Tentaculos',
-    'Tetonas',
-    'Vanilla',
-  ];
-  static const _years = ['2026', '2025', '2024', '2023', '2022', '2021'];
-  static const _statuses = ['En emisión', 'Finalizado', 'Próximamente'];
-  static const _sorts = ['Predeterminado', 'Nombre', 'Recientes'];
+class _CatalogFilterSheetState extends ConsumerState<_CatalogFilterSheet> {
+  /// Convierte la lista de `FilterOption` del backend al formato `(value,
+  /// label)` que entiende el dropdown.
+  static List<({String value, String label})> _adapt(List<FilterOption> opts) =>
+      opts
+          .map((o) => (value: o.value, label: o.label))
+          .toList(growable: false);
 
   late CatalogFilters _draft;
 
@@ -1121,6 +1088,10 @@ class _CatalogFilterSheetState extends State<_CatalogFilterSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final filtersAsync = ref.watch(availableFiltersProvider(widget.domain));
+    final filters = filtersAsync.valueOrNull ?? AvailableFilters.empty;
+    final isLoading = filtersAsync.isLoading && filtersAsync.valueOrNull == null;
+
     return Padding(
       padding: EdgeInsets.only(
         left: 16,
@@ -1147,80 +1118,113 @@ class _CatalogFilterSheetState extends State<_CatalogFilterSheet> {
             ],
           ),
           const SizedBox(height: 18),
-          _FilterDropdown(
-            label: 'Tipo',
-            value: _draft.type,
-            values: widget.isHentaila ? _hentailaTypes : _types,
-            onChanged: (value) => setState(
-              () => _draft = _draft.copyWith(
-                type: value,
-                clearType: value == null,
-              ),
-            ),
-          ),
-          _FilterDropdown(
-            label: 'Género',
-            value: _draft.genre,
-            values: widget.isHentaila ? _hentailaGenres : _genres,
-            onChanged: (value) => setState(
-              () => _draft = _draft.copyWith(
-                genre: value,
-                clearGenre: value == null,
-              ),
-            ),
-          ),
-          _FilterDropdown(
-            label: 'Año',
-            value: _draft.year,
-            values: _years,
-            onChanged: (value) => setState(
-              () => _draft = _draft.copyWith(
-                year: value,
-                clearYear: value == null,
-              ),
-            ),
-          ),
-          _FilterDropdown(
-            label: 'Estado',
-            value: _draft.status,
-            values: _statuses,
-            onChanged: (value) => setState(
-              () => _draft = _draft.copyWith(
-                status: value,
-                clearStatus: value == null,
-              ),
-            ),
-          ),
-          _FilterDropdown(
-            label: 'Ordenar por',
-            value: _draft.sort,
-            values: _sorts,
-            onChanged: (value) => setState(
-              () => _draft = _draft.copyWith(
-                sort: value == 'Predeterminado' ? null : value,
-                clearSort: value == null || value == 'Predeterminado',
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-          SizedBox(
-            width: double.infinity,
-            height: 48,
-            child: FilledButton(
-              onPressed: () {
-                widget.onApply(_draft);
-                Navigator.pop(context);
-              },
-              style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xFF3BE2D0),
-                foregroundColor: Colors.black,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
+          if (isLoading)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 24),
+              child: Center(child: CircularProgressIndicator()),
+            )
+          else ...[
+            // Solo se renderizan dropdowns para campos que el proveedor
+            // realmente filtra. Si `types` viene vacio del backend (caso de
+            // AnimeAV1), la seccion ni siquiera aparece.
+            if (filters.types.isNotEmpty)
+              _FilterDropdown(
+                label: 'Tipo',
+                value: _draft.type,
+                values: _adapt(filters.types),
+                onChanged: (value) => setState(
+                  () => _draft = _draft.copyWith(
+                    type: value,
+                    clearType: value == null,
+                  ),
                 ),
               ),
-              child: const Text(
-                'Filtrar',
-                style: TextStyle(fontWeight: FontWeight.w800),
+            if (filters.genres.isNotEmpty)
+              _FilterDropdown(
+                label: 'Género',
+                value: _draft.genre,
+                values: _adapt(filters.genres),
+                onChanged: (value) => setState(
+                  () => _draft = _draft.copyWith(
+                    genre: value,
+                    clearGenre: value == null,
+                  ),
+                ),
+              ),
+            if (filters.years.isNotEmpty)
+              _FilterDropdown(
+                label: 'Año',
+                value: _draft.year,
+                values: _adapt(filters.years),
+                onChanged: (value) => setState(
+                  () => _draft = _draft.copyWith(
+                    year: value,
+                    clearYear: value == null,
+                  ),
+                ),
+              ),
+            if (filters.statuses.isNotEmpty)
+              _FilterDropdown(
+                label: 'Estado',
+                value: _draft.status,
+                values: _adapt(filters.statuses),
+                onChanged: (value) => setState(
+                  () => _draft = _draft.copyWith(
+                    status: value,
+                    clearStatus: value == null,
+                  ),
+                ),
+              ),
+            if (filters.sorts.isNotEmpty)
+              _FilterDropdown(
+                label: 'Ordenar por',
+                value: _draft.sort,
+                values: _adapt(filters.sorts),
+                onChanged: (value) => setState(
+                  () => _draft = _draft.copyWith(
+                    sort: value,
+                    clearSort: value == null,
+                  ),
+                ),
+              ),
+            if (filters.genres.isEmpty &&
+                filters.types.isEmpty &&
+                filters.statuses.isEmpty &&
+                filters.years.isEmpty &&
+                filters.sorts.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 24),
+                child: Text(
+                  'Este proveedor no expone filtros adicionales.',
+                  style: TextStyle(color: AppColors.textSecondary),
+                ),
+              ),
+          ],
+          const SizedBox(height: 18),
+          // Botón homogéneo con el accent del tema (mismo color que los chips
+          // de proveedor); forma 12px consistente con los inputs.
+          SizedBox(
+            width: double.infinity,
+            height: 52,
+            child: FilledButton.icon(
+              onPressed: isLoading
+                  ? null
+                  : () {
+                      widget.onApply(_draft);
+                      Navigator.pop(context);
+                    },
+              icon: const Icon(Icons.filter_alt_rounded, size: 20),
+              label: const Text(
+                'Aplicar filtros',
+                style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
+              ),
+              style: FilledButton.styleFrom(
+                backgroundColor: Theme.of(context).colorScheme.secondary,
+                foregroundColor: Colors.black,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                elevation: 0,
               ),
             ),
           ),
@@ -1233,7 +1237,10 @@ class _CatalogFilterSheetState extends State<_CatalogFilterSheet> {
 class _FilterDropdown extends StatelessWidget {
   final String label;
   final String? value;
-  final List<String> values;
+  // Cada entrada lleva `value` (lo que se envía al backend, ej slug) y `label`
+  // (lo que se muestra al usuario, ej con tildes). Cuando ambos son iguales
+  // basta con usar `_plain(['...'])` para construir la lista.
+  final List<({String value, String label})> values;
   final ValueChanged<String?> onChanged;
 
   const _FilterDropdown({
@@ -1275,6 +1282,11 @@ class _FilterDropdown extends StatelessWidget {
           ),
           style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
         ),
+        // Lo que se muestra en el campo cerrado (orden paralelo a `items`).
+        selectedItemBuilder: (context) => [
+          Text('$label: Seleccionar'),
+          ...values.map((e) => Text('$label: ${e.label}')),
+        ],
         items: [
           DropdownMenuItem<String?>(
             value: null,
@@ -1282,8 +1294,8 @@ class _FilterDropdown extends StatelessWidget {
           ),
           ...values.map(
             (item) => DropdownMenuItem<String?>(
-              value: item,
-              child: Text('$label: $item'),
+              value: item.value,
+              child: Text(item.label),
             ),
           ),
         ],

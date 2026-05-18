@@ -9,9 +9,12 @@ import '../../../shared/models/anime_model.dart';
 import '../../../shared/models/download_model.dart';
 import '../../../shared/models/monoschinos_hub.dart';
 import '../../../shared/utils/provider_capabilities.dart';
+import '../../../shared/utils/network_error.dart';
 import '../../../shared/widgets/anime_card.dart';
 import '../../../shared/widgets/app_loading.dart';
 import '../../../shared/widgets/app_shimmers.dart';
+import '../../../shared/widgets/network_aware_error.dart';
+import '../../../shared/widgets/no_connection_empty.dart';
 import '../../../shared/widgets/wide_card.dart';
 import '../../downloads/data/downloads_provider.dart';
 import '../../favorites/data/favorites_provider.dart';
@@ -57,6 +60,21 @@ class HomeScreen extends ConsumerWidget {
     }
 
     if (isHentaila) {
+      final hentailaAllFailed = mainList.hasError &&
+          latest.hasError &&
+          isNetworkError(mainList.error) &&
+          isNetworkError(latest.error);
+      if (hentailaAllFailed) {
+        return Scaffold(
+          body: NoConnectionEmpty(
+            onRetry: () {
+              ref.invalidate(popularAnimeProvider);
+              ref.invalidate(latestAnimeProvider);
+              ref.invalidate(hentailaHubProvider);
+            },
+          ),
+        );
+      }
       return Scaffold(
         body: SafeArea(
           child: CustomScrollView(
@@ -102,6 +120,29 @@ class HomeScreen extends ConsumerWidget {
               const SliverToBoxAdapter(child: SizedBox(height: 24)),
             ],
           ),
+        ),
+      );
+    }
+
+    // Si los 3 providers principales del home genérico fallan por red,
+    // mostramos la pantalla completa "Sin conexión" con retry global en lugar
+    // de un home en blanco con secciones silenciadas. Otros tipos de error o
+    // fallos parciales (1 ó 2 secciones) siguen el flujo normal y solo
+    // ocultan la sección rota.
+    final allFailedByNetwork = popular.hasError &&
+        latest.hasError &&
+        recentlyAdded.hasError &&
+        isNetworkError(popular.error) &&
+        isNetworkError(latest.error) &&
+        isNetworkError(recentlyAdded.error);
+    if (allFailedByNetwork) {
+      return Scaffold(
+        body: NoConnectionEmpty(
+          onRetry: () {
+            ref.invalidate(popularAnimeProvider);
+            ref.invalidate(latestAnimeProvider);
+            ref.invalidate(recentlyAddedAnimeProvider);
+          },
         ),
       );
     }
@@ -2194,38 +2235,12 @@ class _MonosChinosHome extends ConsumerWidget {
                 loading: () => const SliverToBoxAdapter(
                   child: PosterRowSkeleton(count: 6),
                 ),
-                error: (_, _) => SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Center(
-                      child: Column(
-                        children: [
-                          Icon(
-                            Icons.error_outline_rounded,
-                            color: AppColors.accent2,
-                            size: 36,
-                          ),
-                          const SizedBox(height: 8),
-                          const Text(
-                            'No se pudo cargar el contenido',
-                            style: TextStyle(
-                              color: AppColors.textSecondary,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          OutlinedButton(
-                            onPressed: () =>
-                                ref.invalidate(monosChinosHubProvider),
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: AppColors.accent,
-                              side: BorderSide(color: AppColors.accent),
-                            ),
-                            child: const Text('Reintentar'),
-                          ),
-                        ],
-                      ),
-                    ),
+                error: (err, _) => SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: NetworkAwareError(
+                    error: err,
+                    message: 'No se pudo cargar el contenido',
+                    onRetry: () => ref.invalidate(monosChinosHubProvider),
                   ),
                 ),
               ),

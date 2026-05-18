@@ -409,6 +409,14 @@ class AnimeRepository {
   }
 
   Future<bool> isProviderAvailable(String domain) async {
+    // CineHax y HentaiTK son providers "scoped" cuyo probe depende de
+    // servicios externos (TMDB, scraping) que pueden tardar o fallar
+    // transitoriamente. Si el backend ya los marca como enabled en
+    // /anime/providers, los damos por buenos sin probe extra para evitar
+    // que desaparezcan del selector ante un timeout puntual.
+    if (domain == 'cinehax.com' || domain == 'hentaitk.net') {
+      return true;
+    }
     try {
       if (domain == 'hentaila.com') {
         final hub = await hentailaHub();

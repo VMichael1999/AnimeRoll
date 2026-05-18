@@ -495,7 +495,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         useOnLoadResource: false,
         transparentBackground: false,
         supportZoom: false,
-        contentBlockers: isApplePlatform ? const [] : buildEmbedAdBlockers(),
+        contentBlockers: buildEmbedAdBlockers(),
         // Allow inline + fullscreen video; YourUpload's <video> needs both.
         allowsInlineMediaPlayback: true,
         iframeAllowFullscreen: true,
@@ -505,10 +505,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         // Mobile UA so embeds serve a player compatible with the current WebView.
         userAgent: userAgent,
       ),
-      // Run an anti-popup script at document start, BEFORE any of the page's
-      // own scripts execute. This neutralizes VOE's popup chain (which uses
-      // synchronous window.open from click handlers and a hidden anchor that
-      // gets programmatically clicked).
+      // Android keeps the aggressive injected scripts. iOS only uses
+      // ContentBlocker rules because WKWebView embeds are more fragile when we
+      // monkey-patch player JavaScript.
       initialUserScripts: UnmodifiableListView<UserScript>(userScripts),
       shouldOverrideUrlLoading: (controller, action) async {
         final target = action.request.url?.toString().toLowerCase() ?? '';

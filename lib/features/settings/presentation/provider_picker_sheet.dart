@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -435,32 +437,33 @@ class _VipUnlockDialog extends ConsumerStatefulWidget {
 }
 
 class _VipUnlockDialogState extends ConsumerState<_VipUnlockDialog> {
-  final List<TextEditingController> _controllers =
-      List.generate(6, (_) => TextEditingController());
-  final List<FocusNode> _focusNodes = List.generate(6, (_) => FocusNode());
+  final TextEditingController _controller = TextEditingController();
+  final FocusNode _focusNode = FocusNode();
   String? _error;
   bool _checking = false;
 
   @override
   void initState() {
     super.initState();
+    _focusNode.addListener(_onFocusChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _focusNodes[0].requestFocus();
+      if (mounted) _focusNode.requestFocus();
     });
   }
 
   @override
   void dispose() {
-    for (final c in _controllers) {
-      c.dispose();
-    }
-    for (final f in _focusNodes) {
-      f.dispose();
-    }
+    _focusNode.removeListener(_onFocusChanged);
+    _controller.dispose();
+    _focusNode.dispose();
     super.dispose();
   }
 
-  String get _code => _controllers.map((c) => c.text).join();
+  String get _code => _controller.text;
+
+  void _onFocusChanged() {
+    if (mounted) setState(() {});
+  }
 
   Future<void> _attempt() async {
     if (_checking) return;
@@ -483,36 +486,29 @@ class _VipUnlockDialogState extends ConsumerState<_VipUnlockDialog> {
     setState(() {
       _checking = false;
       _error = 'Código incorrecto';
+      _controller.clear();
     });
-    // Clear cells and refocus the first one.
-    for (final c in _controllers) {
-      c.clear();
-    }
-    _focusNodes[0].requestFocus();
+    _focusNode.requestFocus();
   }
 
-  void _onChanged(int index, String value) {
+  void _onChanged(String value) {
+    final normalized = value.replaceAll(RegExp(r'\D'), '');
+    final limited = normalized.length > 6
+        ? normalized.substring(0, 6)
+        : normalized;
+    if (_controller.text != limited) {
+      _controller.value = TextEditingValue(
+        text: limited,
+        selection: TextSelection.collapsed(offset: limited.length),
+      );
+    }
     if (_error != null) {
       setState(() => _error = null);
-    }
-    if (value.isEmpty) return;
-    final digit = value.characters.last;
-    _controllers[index].text = digit;
-    _controllers[index].selection = TextSelection.fromPosition(
-      const TextPosition(offset: 1),
-    );
-    if (index < 5) {
-      _focusNodes[index + 1].requestFocus();
     } else {
-      _focusNodes[index].unfocus();
-      _attempt();
+      setState(() {});
     }
-  }
-
-  void _onBackspace(int index) {
-    if (_controllers[index].text.isEmpty && index > 0) {
-      _controllers[index - 1].clear();
-      _focusNodes[index - 1].requestFocus();
+    if (limited.length == 6) {
+      unawaited(_attempt());
     }
   }
 
@@ -561,23 +557,36 @@ class _VipUnlockDialogState extends ConsumerState<_VipUnlockDialog> {
               ),
             ),
             const SizedBox(height: 18),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                ..._buildCells(0, 3),
-                const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 6),
-                  child: Text(
-                    '—',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w900,
-                      color: AppColors.textSecondary,
+            GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onTap: _focusNode.requestFocus,
+              child: SizedBox(
+                height: 48,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        ..._buildCells(0, 3),
+                        const Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 6),
+                          child: Text(
+                            '—',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w900,
+                              color: AppColors.textSecondary,
+                            ),
+                          ),
+                        ),
+                        ..._buildCells(3, 6),
+                      ],
                     ),
-                  ),
+                    Positioned.fill(child: _buildHiddenCodeField()),
+                  ],
                 ),
-                ..._buildCells(3, 6),
-              ],
+              ),
             ),
             if (_error != null) ...[
               const SizedBox(height: 12),
@@ -652,67 +661,69 @@ class _VipUnlockDialogState extends ConsumerState<_VipUnlockDialog> {
   List<Widget> _buildCells(int start, int end) {
     return List.generate(end - start, (i) {
       final index = start + i;
-      final filled = _controllers[index].text.isNotEmpty;
+      final digit = index < _code.length ? _code[index] : '';
+      final filled = digit.isNotEmpty;
+      final activeIndex = _code.length >= 6 ? 5 : _code.length;
+      final active = _focusNode.hasFocus && index == activeIndex;
+      final borderColor = active
+          ? AppColors.accent
+          : filled
+              ? AppColors.accent2
+              : AppColors.border;
       return Padding(
         padding: const EdgeInsets.symmetric(horizontal: 3),
-        child: SizedBox(
+        child: Container(
           width: 38,
           height: 48,
-          child: KeyboardListener(
-            focusNode: FocusNode(),
-            onKeyEvent: (event) {
-              if (event is KeyDownEvent &&
-                  event.logicalKey == LogicalKeyboardKey.backspace) {
-                _onBackspace(index);
-              }
-            },
-            child: TextField(
-              controller: _controllers[index],
-              focusNode: _focusNodes[index],
-              textAlign: TextAlign.center,
-              keyboardType: TextInputType.number,
-              inputFormatters: [
-                FilteringTextInputFormatter.digitsOnly,
-                LengthLimitingTextInputFormatter(1),
-              ],
-              maxLength: 1,
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.w900,
-                color: filled ? AppColors.accent2 : AppColors.textPrimary,
-              ),
-              decoration: InputDecoration(
-                counterText: '',
-                filled: true,
-                fillColor: AppColors.surface2,
-                contentPadding: EdgeInsets.zero,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: BorderSide(
-                    color: filled ? AppColors.accent2 : AppColors.border,
-                    width: 1.5,
-                  ),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: BorderSide(
-                    color: filled ? AppColors.accent2 : AppColors.border,
-                    width: 1.5,
-                  ),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: BorderSide(
-                    color: AppColors.accent,
-                    width: 1.5,
-                  ),
-                ),
-              ),
-              onChanged: (value) => _onChanged(index, value),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: AppColors.surface2,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: borderColor,
+              width: 1.5,
+            ),
+          ),
+          child: Text(
+            digit,
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.w900,
+              color: filled ? AppColors.accent2 : AppColors.textPrimary,
             ),
           ),
         ),
       );
     });
+  }
+
+  Widget _buildHiddenCodeField() {
+    return Opacity(
+      opacity: 0,
+      child: TextField(
+        controller: _controller,
+        focusNode: _focusNode,
+        autofocus: true,
+        showCursor: false,
+        enableInteractiveSelection: false,
+        keyboardType: TextInputType.number,
+        textInputAction: TextInputAction.done,
+        inputFormatters: [
+          FilteringTextInputFormatter.digitsOnly,
+          LengthLimitingTextInputFormatter(6),
+        ],
+        maxLength: 6,
+        style: const TextStyle(color: Colors.transparent),
+        cursorColor: Colors.transparent,
+        decoration: const InputDecoration(
+          border: InputBorder.none,
+          counterText: '',
+          isCollapsed: true,
+          contentPadding: EdgeInsets.zero,
+        ),
+        onChanged: _onChanged,
+        onSubmitted: (_) => _attempt(),
+      ),
+    );
   }
 }

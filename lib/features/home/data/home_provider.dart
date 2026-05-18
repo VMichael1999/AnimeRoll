@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../shared/models/anime_model.dart';
 import '../../../shared/models/monoschinos_hub.dart';
 import '../../../shared/models/schedule_anime_model.dart';
+import '../../../shared/utils/provider_capabilities.dart';
 import '../../settings/data/settings_provider.dart';
 import 'anime_repository.dart';
 
@@ -37,8 +38,8 @@ final monosChinosAiringProvider = FutureProvider<List<AnimeModel>>((ref) async {
 
 final popularAnimeProvider = FutureProvider<List<AnimeModel>>((ref) async {
   final repo = ref.read(animeRepositoryProvider);
-  final activeProvider = ref.watch(providerPrefProvider);
-  if (activeProvider == 'hentaila.com') {
+  final id = ProviderId.fromDomain(ref.watch(providerPrefProvider));
+  if (id == ProviderId.hentaila) {
     final hub = await ref.watch(hentailaHubProvider.future);
     return hub.latestMedia;
   }
@@ -48,8 +49,8 @@ final popularAnimeProvider = FutureProvider<List<AnimeModel>>((ref) async {
 
 final latestAnimeProvider = FutureProvider<List<AnimeModel>>((ref) async {
   final repo = ref.read(animeRepositoryProvider);
-  final activeProvider = ref.watch(providerPrefProvider);
-  if (activeProvider == 'hentaila.com') {
+  final id = ProviderId.fromDomain(ref.watch(providerPrefProvider));
+  if (id == ProviderId.hentaila) {
     final hub = await ref.watch(hentailaHubProvider.future);
     return hub.latestEpisodes;
   }
@@ -63,12 +64,12 @@ final recentlyAddedAnimeProvider = FutureProvider<List<AnimeModel>>((
   ref,
 ) async {
   final repo = ref.read(animeRepositoryProvider);
-  final activeProvider = ref.watch(providerPrefProvider);
-  if (activeProvider == 'hentaila.com') {
+  final id = ProviderId.fromDomain(ref.watch(providerPrefProvider));
+  if (id == ProviderId.hentaila) {
     final hub = await ref.watch(hentailaHubProvider.future);
     return hub.latestMedia;
   }
-  return repo.catalog(domain: 'animeav1.com', limit: 12);
+  return repo.catalog(domain: ProviderId.animeav1.canonicalDomain, limit: 12);
 });
 
 final selectedHomeGenreProvider = StateProvider<String>((ref) => 'Todo');
@@ -82,11 +83,12 @@ final genreAnimeProvider = FutureProvider.family<List<AnimeModel>, String>((
   }
   final repo = ref.read(animeRepositoryProvider);
   final activeProvider = ref.watch(providerPrefProvider);
-  if (activeProvider == 'hentaila.com') {
+  final id = ProviderId.fromDomain(activeProvider);
+  if (id == ProviderId.hentaila) {
     return repo.search(_genreQuery(genre), domain: activeProvider);
   }
   return repo.catalog(
-    domain: 'animeav1.com',
+    domain: ProviderId.animeav1.canonicalDomain,
     genre: catalogGenreValue(genre),
     limit: 24,
   );

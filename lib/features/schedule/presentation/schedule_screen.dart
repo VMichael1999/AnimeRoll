@@ -1,9 +1,9 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../shared/models/schedule_anime_model.dart';
+import '../../../shared/widgets/app_network_image.dart';
 import '../../../shared/widgets/app_toast.dart';
 import '../../../shared/widgets/error_view.dart';
 import '../data/schedule_notifications_provider.dart';
@@ -350,11 +350,10 @@ class _HeroNextEpisode extends ConsumerWidget {
             children: [
               Container(color: AppColors.surface),
               if (imageUrl != null)
-                CachedNetworkImage(
-                  imageUrl: imageUrl,
+                AppNetworkImage(
+                  url: imageUrl,
                   fit: BoxFit.cover,
-                  errorWidget: (_, _, _) =>
-                      ColoredBox(color: AppColors.surface),
+                  errorWidget: ColoredBox(color: AppColors.surface),
                 ),
               // Bottom gradient overlay for legibility.
               Container(
@@ -830,14 +829,13 @@ class _CardThumbnail extends StatelessWidget {
           fit: StackFit.expand,
           children: [
             Container(color: AppColors.surface2),
-            if (imageUrl != null)
-              CachedNetworkImage(
-                imageUrl: imageUrl,
-                fit: BoxFit.cover,
-                errorWidget: (_, _, _) => const _ThumbnailPlaceholder(),
-              )
-            else
-              const _ThumbnailPlaceholder(),
+            AppNetworkImage(
+              url: imageUrl,
+              width: 120,
+              fit: BoxFit.cover,
+              errorWidget: const _ThumbnailPlaceholder(),
+              placeholder: const _ThumbnailPlaceholder(),
+            ),
             if (time != null)
               Positioned(
                 top: 6,

@@ -1,7 +1,7 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import '../../core/theme/app_theme.dart';
 import '../models/anime_model.dart';
+import 'app_network_image.dart';
 
 class AnimeCard extends StatelessWidget {
   final AnimeModel anime;
@@ -64,15 +64,13 @@ class _Thumbnail extends StatelessWidget {
           SizedBox(
             width: double.infinity,
             height: 138,
-            child: cover != null
-                ? CachedNetworkImage(
-                    imageUrl: cover!,
-                    fit: BoxFit.cover,
-                    placeholder: (context, _) =>
-                        ColoredBox(color: AppColors.surface2),
-                    errorWidget: (context, url, _) => const _PlaceholderThumb(),
-                  )
-                : const _PlaceholderThumb(),
+            child: AppNetworkImage(
+              url: cover,
+              fit: BoxFit.cover,
+              height: 138,
+              errorWidget: const _PlaceholderThumb(),
+              placeholder: const _PlaceholderThumb(),
+            ),
           ),
           if (episodeCount != null)
             Positioned(

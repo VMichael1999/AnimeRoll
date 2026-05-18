@@ -1,7 +1,7 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import '../../core/theme/app_theme.dart';
 import '../models/anime_model.dart';
+import 'app_network_image.dart';
 
 class WideCard extends StatelessWidget {
   final AnimeModel anime;
@@ -22,19 +22,13 @@ class WideCard extends StatelessWidget {
           child: Stack(
             fit: StackFit.expand,
             children: [
-              if (anime.cover != null)
-                CachedNetworkImage(
-                  imageUrl: anime.cover!,
-                  fit: BoxFit.cover,
-                  color: Colors.black.withValues(alpha: 0.4),
-                  colorBlendMode: BlendMode.darken,
-                  placeholder: (context, _) =>
-                      ColoredBox(color: AppColors.surface2),
-                  errorWidget: (context, url, _) =>
-                      ColoredBox(color: AppColors.surface2),
-                )
-              else
-                ColoredBox(color: AppColors.surface2),
+              AppNetworkImage(
+                url: anime.cover,
+                width: 200,
+                height: 110,
+                color: Colors.black.withValues(alpha: 0.4),
+                colorBlendMode: BlendMode.darken,
+              ),
               Positioned(
                 bottom: 0,
                 left: 0,

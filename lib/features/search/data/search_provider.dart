@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../shared/models/anime_model.dart';
 import '../../../shared/models/available_filters.dart';
+import '../../../shared/utils/provider_capabilities.dart';
 import '../../home/data/anime_repository.dart';
 import '../../home/data/home_provider.dart';
 import '../../settings/data/settings_provider.dart';
@@ -19,18 +20,16 @@ final catalogFiltersProvider = StateProvider<CatalogFilters>(
 
 enum SearchMode { search, mood, catalog }
 
-/// Lista canónica de proveedores que "fijan" el dominio (sin permitir
-/// switcher de búsqueda multi-proveedor). Cuando el usuario eligió uno de
-/// estos como activo, todas las consultas (mood/search/catalog) deben ir a
-/// ese proveedor.
-const _scopedProviders = {'hentaila.com', 'monoschinos2.net'};
+/// Wrapper para preguntar "este proveedor es scoped?" sin volver a
+/// hardcodear nombres. Delega en `ProviderId.fromDomain(...).isScoped`.
+bool _isScoped(String? domain) => ProviderId.fromDomain(domain).isScoped;
 
 final moodResultsProvider = FutureProvider.autoDispose<List<MoodAnimeResult>>((
   ref,
 ) async {
   final query = ref.watch(queryProvider);
   final activeProvider = ref.watch(providerPrefProvider);
-  final domain = _scopedProviders.contains(activeProvider)
+  final domain = _isScoped(activeProvider)
       ? activeProvider
       : ref.watch(domainProvider);
   if (query.trim().isEmpty) return [];
@@ -97,7 +96,7 @@ final searchResultsProvider = FutureProvider.autoDispose<List<AnimeModel>>((
 ) async {
   final query = ref.watch(queryProvider);
   final activeProvider = ref.watch(providerPrefProvider);
-  final domain = _scopedProviders.contains(activeProvider)
+  final domain = _isScoped(activeProvider)
       ? activeProvider
       : ref.watch(domainProvider);
   if (query.trim().isEmpty) return [];
@@ -112,9 +111,7 @@ final searchResultsProvider = FutureProvider.autoDispose<List<AnimeModel>>((
       query.trim(),
       // Excluimos proveedores scoped del multi-search por defecto. Cada uno
       // (hentaila, monoschinos) se busca solo desde su propia pantalla.
-      domains: providers
-          .where((d) => !_scopedProviders.contains(d))
-          .toList(),
+      domains: providers.where((d) => !_isScoped(d)).toList(),
     );
   }
   return repo.search(query.trim(), domain: domain);
@@ -152,7 +149,9 @@ final catalogResultsProvider = FutureProvider.autoDispose<List<AnimeModel>>((
     uncensored: filters.uncensored,
     // El parámetro `search` solo aplica al modo "catalog-con-buscador-inline"
     // (hentaila). Otros proveedores tienen pantalla de búsqueda separada.
-    search: activeProvider == 'hentaila.com' ? query.trim() : null,
+    search: ProviderId.fromDomain(activeProvider) == ProviderId.hentaila
+        ? query.trim()
+        : null,
     limit: 60,
   );
 });

@@ -8,6 +8,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../shared/models/anime_model.dart';
 import '../../../shared/models/download_model.dart';
 import '../../../shared/models/monoschinos_hub.dart';
+import '../../../shared/utils/provider_capabilities.dart';
 import '../../../shared/widgets/anime_card.dart';
 import '../../../shared/widgets/wide_card.dart';
 import '../../downloads/data/downloads_provider.dart';
@@ -15,6 +16,7 @@ import '../../favorites/data/favorites_provider.dart';
 import '../../history/data/watch_history_provider.dart';
 import '../../settings/data/settings_provider.dart';
 import '../data/home_provider.dart';
+import '../../search/data/search_provider.dart' show availableFiltersProvider;
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
@@ -27,8 +29,9 @@ class HomeScreen extends ConsumerWidget {
     final latest = ref.watch(latestAnimeProvider);
     final recentlyAdded = ref.watch(recentlyAddedAnimeProvider);
     final activeProvider = ref.watch(providerPrefProvider);
-    final isHentaila = activeProvider == 'hentaila.com';
-    final isMonosChinos = activeProvider == 'monoschinos2.net';
+    final providerId = ProviderId.fromDomain(activeProvider);
+    final isHentaila = providerId == ProviderId.hentaila;
+    final isMonosChinos = providerId == ProviderId.monoschinos;
     final mainList = selectedGenre == 'Todo' ? popular : genreAnime;
 
     // MonosChinos: estilo timeline retro propio, distinto a AnimeAV1 (carrusel
@@ -59,7 +62,9 @@ class HomeScreen extends ConsumerWidget {
                     subtitle: selectedGenre == 'Todo'
                         ? 'RECIENTEMENTE AGREGADOS'
                         : selectedGenre.toUpperCase(),
-                    action: 'Catalogo de Hentai',
+                    // El botón "Catalogo de Hentai" ya aparece en el header
+                    // superior (`_HentailaHeader`). Duplicarlo aquí causaba
+                    // que el mismo CTA se viera dos veces en la pantalla.
                     list: list,
                   ),
                   loading: () => const _HentailaGridSkeleton(),
@@ -674,9 +679,9 @@ class _CarouselCard extends StatelessWidget {
                         ...anime.genres.take(2),
                         if (anime.year != null) anime.year!,
                       ].join(' · '),
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 10,
-                        color: Color(0xAAFFFFFF),
+                        color: Colors.white.withValues(alpha: 0.66),
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -802,20 +807,20 @@ class _HentailaHeader extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Row(
         children: [
-          const Expanded(
+          Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
+                const Text(
                   'Hentai',
                   style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900),
                 ),
-                SizedBox(height: 2),
+                const SizedBox(height: 2),
                 Text(
                   'RECIENTEMENTE AGREGADOS',
                   style: TextStyle(
                     fontSize: 12,
-                    color: Color(0xFFF1C7EB),
+                    color: AppColors.accent2,
                     fontWeight: FontWeight.w800,
                   ),
                 ),
@@ -863,7 +868,9 @@ class _SearchBar extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final isHentaila = ref.watch(providerPrefProvider) == 'hentaila.com';
+    final isHentaila =
+        ProviderId.fromDomain(ref.watch(providerPrefProvider)) ==
+            ProviderId.hentaila;
     return GestureDetector(
       onTap: () => context.go('/search'),
       child: Padding(
@@ -901,53 +908,37 @@ class _SearchBar extends ConsumerWidget {
 class _GenreFilter extends ConsumerWidget {
   const _GenreFilter();
 
-  static const _genres = [
-    'Todo',
-    'Acción',
-    'Romance',
-    'Isekai',
-    'Terror',
-    'Comedia',
-    'Shounen',
-  ];
-
-  static const _hentailaGenres = [
-    'Todo',
-    '3D',
-    'Ahegao',
-    'Anal',
-    'Casadas',
-    'Chikan',
-    'Ecchi',
-    'Enfermeras',
-    'Escolares',
-    'Futanari',
-    'Gore',
-    'Hardcore',
-    'Harem',
-    'Incesto',
-    'Juegos Sexuales',
-    'Suspenso',
-    'Milfs',
-    'Maids',
-    'Netorare',
-    'Ninfomania',
-  ];
+  /// Fallback usado mientras llega la respuesta del backend o si el endpoint
+  /// `/filters` falla. Lista mínima viable; lo real viene de
+  /// `availableFiltersProvider` (que pega a `/filters?domain=...`).
+  static const _fallbackGenres = ['Acción', 'Romance', 'Comedia', 'Shounen'];
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final selected = ref.watch(selectedHomeGenreProvider);
-    final isHentaila = ref.watch(providerPrefProvider) == 'hentaila.com';
-    final genres = isHentaila ? _hentailaGenres : _genres;
+    final activeProvider = ref.watch(providerPrefProvider);
+    // El home siempre tiene "Todo" + los géneros del proveedor activo. Si la
+    // llamada al backend falla (no internet en primer arranque), usamos
+    // `_fallbackGenres` para no quedar con una lista vacía.
+    final filtersAsync = ref.watch(availableFiltersProvider(activeProvider));
+    final genres = <String>[
+      'Todo',
+      ...?filtersAsync.valueOrNull?.genres.map((g) => g.label),
+    ];
+    // Si el fetch falló y ni siquiera tenemos un valueOrNull con géneros,
+    // mostramos el fallback para que el filtro no quede inútil.
+    final effectiveGenres = genres.length <= 1
+        ? <String>['Todo', ..._fallbackGenres]
+        : genres;
     return SizedBox(
       height: 32,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 16),
-        itemCount: genres.length,
+        itemCount: effectiveGenres.length,
         separatorBuilder: (context, _) => const SizedBox(width: 8),
         itemBuilder: (context, i) {
-          final genre = genres[i];
+          final genre = effectiveGenres[i];
           final active = genre == selected;
           return GestureDetector(
             onTap: () =>
@@ -1249,10 +1240,10 @@ class _SpotlightCard extends StatelessWidget {
     final anime = spotlight.anime;
     return Container(
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
+        gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [Color(0xFF1E1228), Color(0xFF0D0D20)],
+          colors: [AppColors.surface, AppColors.bg],
         ),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: AppColors.accent.withValues(alpha: 0.3)),
@@ -1272,18 +1263,18 @@ class _SpotlightCard extends StatelessWidget {
                     imageUrl: anime.cover!,
                     fit: BoxFit.cover,
                     errorWidget: (context, url, err) =>
-                        const ColoredBox(color: Color(0xFF2D1F50)),
+                        ColoredBox(color: AppColors.surface2),
                   )
                 else
-                  const ColoredBox(color: Color(0xFF2D1F50)),
+                  ColoredBox(color: AppColors.surface2),
                 // Bottom gradient
-                const DecoratedBox(
+                DecoratedBox(
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
                       begin: Alignment.topCenter,
                       end: Alignment.bottomCenter,
-                      stops: [0.4, 1.0],
-                      colors: [Colors.transparent, Color(0xFF1E1228)],
+                      stops: const [0.4, 1.0],
+                      colors: [Colors.transparent, AppColors.surface],
                     ),
                   ),
                 ),
@@ -1331,8 +1322,8 @@ class _SpotlightCard extends StatelessWidget {
                         ].join(' · '),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Color(0x99FFFFFF),
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.6),
                           fontSize: 10,
                           fontWeight: FontWeight.w600,
                         ),
@@ -1861,7 +1852,6 @@ class _EpisodeUpdateCard extends StatelessWidget {
 class _HentailaGridSection extends ConsumerWidget {
   final String title;
   final String subtitle;
-  final String? action;
   final List<AnimeModel> list;
   final bool episodeCards;
 
@@ -1869,7 +1859,6 @@ class _HentailaGridSection extends ConsumerWidget {
     required this.title,
     required this.subtitle,
     required this.list,
-    this.action,
     this.episodeCards = false,
   });
 
@@ -1900,19 +1889,13 @@ class _HentailaGridSection extends ConsumerWidget {
                       subtitle,
                       style: TextStyle(
                         fontSize: 11,
-                        color: Color(0xFFF1C7EB),
+                        color: AppColors.accent2,
                         fontWeight: FontWeight.w800,
                       ),
                     ),
                   ],
                 ),
               ),
-              if (action != null)
-                TextButton.icon(
-                  onPressed: () => context.go('/search'),
-                  icon: Icon(Icons.layers_outlined, size: 16),
-                  label: Text(action!),
-                ),
             ],
           ),
           const SizedBox(height: 12),
@@ -2049,7 +2032,7 @@ class _HentailaCard extends StatelessWidget {
                         style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w800,
-                          color: Color(0xFFF1C7EB),
+                          color: AppColors.accent2,
                         ),
                       ),
                     ),

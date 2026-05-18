@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../shared/models/anime_model.dart';
 import '../../../shared/models/available_filters.dart';
+import '../../../shared/utils/provider_capabilities.dart';
 import '../../../shared/widgets/error_view.dart';
 import '../../home/data/anime_repository.dart';
 import '../../settings/data/settings_provider.dart';
@@ -73,8 +74,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   Widget build(BuildContext context) {
     final mode = ref.watch(searchModeProvider);
     final activeProvider = ref.watch(providerPrefProvider);
-    final isHentaila = activeProvider == 'hentaila.com';
-    final isMonosChinos = activeProvider == 'monoschinos2.net';
+    final providerId = ProviderId.fromDomain(activeProvider);
+    final isHentaila = providerId == ProviderId.hentaila;
+    final isMonosChinos = providerId == ProviderId.monoschinos;
     // HentaiLA fuerza catalog porque su UX combina buscar+filtros en una
     // pantalla. MonosChinos respeta el modo elegido: si vienes de la lupa
     // se queda en `search`, si vienes del "VER TODO" del home va a `catalog`.
@@ -1106,12 +1108,13 @@ class _NoResults extends StatelessWidget {
 }
 
 void _showCatalogFilters(BuildContext context, WidgetRef ref) {
-  final activeProvider = ref.read(providerPrefProvider);
-  // Domain que se manda al backend para pedir filtros. Mismo que usa el
-  // catalog: si el usuario eligio hentaila, hentaila; si no, animeav1.
-  final domain = activeProvider == 'hentaila.com'
-      ? 'hentaila.com'
-      : 'animeav1.com';
+  // Domain que se manda al backend para pedir filtros. Mismo criterio que el
+  // catalog: respeta el proveedor activo del usuario. Antes solo se
+  // contemplaba hentaila vs animeav1, lo que hacía que MonosChinos cayera al
+  // filter de AV1 (bug del que se quejó el usuario).
+  final domain = ProviderId.fromDomain(
+    ref.read(providerPrefProvider),
+  ).canonicalDomain;
   showModalBottomSheet<void>(
     context: context,
     backgroundColor: AppColors.surface,

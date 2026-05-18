@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../features/settings/data/settings_provider.dart';
+import '../../shared/utils/provider_capabilities.dart';
 import '../theme/app_theme.dart';
 
 class MainShell extends ConsumerStatefulWidget {
@@ -25,7 +26,11 @@ class _MainShellState extends ConsumerState<MainShell> {
 
   @override
   Widget build(BuildContext context) {
-    final showSchedule = ref.watch(providerPrefProvider) != 'hentaila.com';
+    // Mostramos el horario solo cuando el proveedor activo lo soporta.
+    // Antes era `!= 'hentaila.com'`, lo que dejaba el botón visible para
+    // proveedores como MonosChinos que tampoco exponen schedule real.
+    final showSchedule =
+        ProviderId.fromDomain(ref.watch(providerPrefProvider)).supportsSchedule;
     final location = GoRouterState.of(context).uri.path;
     if (!showSchedule && location.startsWith('/schedule')) {
       WidgetsBinding.instance.addPostFrameCallback((_) {

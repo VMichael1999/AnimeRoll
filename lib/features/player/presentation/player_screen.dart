@@ -664,7 +664,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     final host = Uri.tryParse(videoUrl)?.host.toLowerCase() ?? '';
 
     // HentaiLA: CDN + direct downloads
-    if (host.contains('hentaila.com') || host.contains('hentaila')) {
+    if (host.contains('hentaila')) {
       return {
         'Referer': 'https://hentaila.com/',
         'Origin': 'https://hentaila.com',
@@ -672,7 +672,19 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       };
     }
 
-    // Default to AnimeAV1 — most providers funnel through its HLS/embed chain.
+    // MonosChinos: canonical es vww.monoschinos2.net. Algunos servidores
+    // embebidos validan referer/origin contra ese host. Sin esto, los
+    // streams pueden fallar con 403/404 en uqload/mp4upload.
+    if (host.contains('monoschinos')) {
+      return {
+        'Referer': 'https://vww.monoschinos2.net/',
+        'Origin': 'https://vww.monoschinos2.net',
+        'User-Agent': ua,
+      };
+    }
+
+    // Default a AnimeAV1 (la mayoría de proveedores no requieren headers
+    // específicos, pero AV1 sirve HLS encadenado por su dominio).
     return {
       'Referer': 'https://animeav1.com/',
       'Origin': 'https://animeav1.com',
@@ -1314,13 +1326,17 @@ class _AiRecapCard extends ConsumerStatefulWidget {
 class _AiRecapCardState extends ConsumerState<_AiRecapCard> {
   bool _dismissed = false;
 
+  /// Paleta arcoíris fija para los "puntos" decorativos de la card de recap.
+  /// Deliberadamente NO sigue el tema accent — el objetivo es dar variedad
+  /// cromática entre cards (rojo, morado, verde, ámbar, azul, rosa). Si
+  /// fueran derivados del accent, todos los puntos serían del mismo tono.
   static const _dotColors = [
-    Color(0xFFEF4444),
-    Color(0xFF7C3AED),
-    Color(0xFF22C55E),
-    Color(0xFFF59E0B),
-    Color(0xFF3B82F6),
-    Color(0xFFEC4899),
+    Color(0xFFEF4444), // rojo
+    Color(0xFF7C3AED), // morado
+    Color(0xFF22C55E), // verde
+    Color(0xFFF59E0B), // ámbar
+    Color(0xFF3B82F6), // azul
+    Color(0xFFEC4899), // rosa
   ];
 
   String _formatDuration(int ms) {

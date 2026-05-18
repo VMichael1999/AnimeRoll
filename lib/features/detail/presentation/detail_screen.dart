@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../shared/models/anime_model.dart';
 import '../../../shared/models/episode_model.dart';
+import '../../../shared/utils/provider_capabilities.dart';
 import '../../../shared/widgets/app_toast.dart';
 import '../../../shared/widgets/error_view.dart';
 import '../data/detail_provider.dart';
@@ -503,16 +504,15 @@ class _GenreTag extends StatelessWidget {
 }
 
 void _openGenreCatalog(BuildContext context, AnimeModel anime, String genre) {
-  final isHentaila =
-      Uri.tryParse(anime.url)?.host.contains('hentaila') == true;
-  final domain = isHentaila ? 'hentaila.com' : 'animeav1.com';
-  // AnimeAV1 espera slugs ASCII (`accion`, `ciencia-ficcion`). HentaiLA en
-  // cambio espera los nombres tal cual aparecen en el sitio (`Ahegao`,
-  // `Juegos Sexuales`). Si normalizabamos a slug, el filtro de HentaiLA no
-  // devolvia resultados al venir desde el detalle.
-  final genreValue = isHentaila ? genre : catalogGenreValue(genre);
+  final providerId = ProviderId.fromDomain(anime.url);
+  // HentaiLA espera el label exacto del sitio ("Ahegao", "Juegos Sexuales").
+  // El resto de proveedores usan slugs ASCII (`accion`, `ciencia-ficcion`).
+  // MonosChinos también acepta slugs.
+  final genreValue =
+      providerId == ProviderId.hentaila ? genre : catalogGenreValue(genre);
   context.go(
-    '/search?mode=catalog&domain=$domain&genre=${Uri.encodeComponent(genreValue)}',
+    '/search?mode=catalog&domain=${providerId.canonicalDomain}'
+    '&genre=${Uri.encodeComponent(genreValue)}',
   );
 }
 
@@ -648,7 +648,8 @@ class _EpisodeList extends ConsumerWidget {
     // Hentaila's episode thumbnails are stills from the chapter, not the
     // anime cover. Always prefer the anime cover so the saved album shows the
     // poster instead of a scene from the episode.
-    final isHentaila = animeUrl.contains('hentaila.com');
+    final isHentaila =
+        ProviderId.fromDomain(animeUrl) == ProviderId.hentaila;
     final thumbnail = isHentaila
         ? (fallbackThumbnail ?? episode.thumbnail)
         : (episode.thumbnail ?? fallbackThumbnail);

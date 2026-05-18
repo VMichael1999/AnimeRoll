@@ -165,9 +165,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   }
 
   Future<void> _seekToSavedPosition(BetterPlayerController controller) async {
-    final entry = ref
-        .read(watchHistoryProvider.notifier)
-        .find(_episodeUrl);
+    final entry = ref.read(watchHistoryProvider.notifier).find(_episodeUrl);
     if (entry == null || entry.completed) return;
     final position = Duration(milliseconds: entry.positionMs);
     final duration =
@@ -215,9 +213,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
 
   void _recordMarathonTick() {
     final video = _bpController?.videoPlayerController;
-    if (video == null ||
-        !video.value.initialized ||
-        !video.value.isPlaying) {
+    if (video == null || !video.value.initialized || !video.value.isPlaying) {
       return;
     }
     final position = video.value.position;
@@ -457,6 +453,28 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   }
 
   Widget _embedPlayer(String url) {
+    final isApplePlatform =
+        defaultTargetPlatform == TargetPlatform.iOS ||
+        defaultTargetPlatform == TargetPlatform.macOS;
+    final userAgent = isApplePlatform
+        ? 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) '
+              'AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 '
+              'Mobile/15E148 Safari/604.1'
+        : 'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 '
+              '(KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36';
+    final userScripts = isApplePlatform
+        ? const <UserScript>[]
+        : [
+            UserScript(
+              source: _antiPopupScript,
+              injectionTime: UserScriptInjectionTime.AT_DOCUMENT_START,
+            ),
+            UserScript(
+              source: _antiOverlayScript,
+              injectionTime: UserScriptInjectionTime.AT_DOCUMENT_END,
+            ),
+          ];
+
     // Use the original embed URL (NOT the rewritten /m3u8/<id> variant) so the
     // player page can run its own JS and resolve the real stream internally.
     //
@@ -477,32 +495,21 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         useOnLoadResource: false,
         transparentBackground: false,
         supportZoom: false,
-        contentBlockers: buildEmbedAdBlockers(),
+        contentBlockers: isApplePlatform ? const [] : buildEmbedAdBlockers(),
         // Allow inline + fullscreen video; YourUpload's <video> needs both.
         allowsInlineMediaPlayback: true,
         iframeAllowFullscreen: true,
         // Android: hybrid composition lets the video surface composite
         // correctly when the WebView is sized to fit the player area.
         useHybridComposition: true,
-        // Mobile UA so embeds serve their mobile player (smaller, fewer ads).
-        userAgent:
-            'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 '
-            '(KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
+        // Mobile UA so embeds serve a player compatible with the current WebView.
+        userAgent: userAgent,
       ),
       // Run an anti-popup script at document start, BEFORE any of the page's
       // own scripts execute. This neutralizes VOE's popup chain (which uses
       // synchronous window.open from click handlers and a hidden anchor that
       // gets programmatically clicked).
-      initialUserScripts: UnmodifiableListView<UserScript>([
-        UserScript(
-          source: _antiPopupScript,
-          injectionTime: UserScriptInjectionTime.AT_DOCUMENT_START,
-        ),
-        UserScript(
-          source: _antiOverlayScript,
-          injectionTime: UserScriptInjectionTime.AT_DOCUMENT_END,
-        ),
-      ]),
+      initialUserScripts: UnmodifiableListView<UserScript>(userScripts),
       shouldOverrideUrlLoading: (controller, action) async {
         final target = action.request.url?.toString().toLowerCase() ?? '';
         const adHosts = [
@@ -2606,9 +2613,7 @@ class _GenrePill extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: clickable ? accent : AppColors.border,
-          ),
+          border: Border.all(color: clickable ? accent : AppColors.border),
           color: AppColors.surface2,
         ),
         child: Text(

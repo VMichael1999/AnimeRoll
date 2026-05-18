@@ -14,8 +14,10 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/web/ad_blocker.dart';
 import '../../../shared/models/anime_model.dart';
 import '../../../shared/models/episode_model.dart';
+import '../../../shared/widgets/app_loading.dart';
 import '../../../shared/widgets/app_toast.dart';
 import '../../../shared/widgets/error_view.dart';
+import '../../../shared/widgets/no_servers_empty.dart';
 import '../../detail/data/detail_provider.dart';
 import '../../downloads/data/downloads_provider.dart';
 import '../../home/data/home_provider.dart' show catalogGenreValue;
@@ -792,6 +794,17 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         : ref.watch(animeDetailProvider(animeUrl));
     _latestDetail = detailAsync?.valueOrNull;
 
+    // Caso especial: sin servidores → pantalla completa con el empty state
+    // y su botón "atrás" propio. No metemos esto dentro del AspectRatio 16:9
+    // porque el contenido (imagen + texto + chip) no cabe ahí.
+    final serversList = serversAsync.valueOrNull;
+    if (serversList != null && serversList.isEmpty) {
+      return const Scaffold(
+        backgroundColor: Colors.black,
+        body: NoServersEmpty(),
+      );
+    }
+
     final videoArea = SafeArea(
       bottom: false,
       child: AspectRatio(
@@ -800,12 +813,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
           data: (servers) {
             _lastServers = servers;
             if (servers.isEmpty) {
-              return const Center(
-                child: Text(
-                  'Sin servidores disponibles',
-                  style: TextStyle(color: Colors.white),
-                ),
-              );
+              return const NoServersEmpty(compact: true);
             }
             final selectedUrlIndex = selectedServerUrl == null
                 ? -1
@@ -834,18 +842,14 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                   ),
                 );
               }
-              return const Center(
-                child: CircularProgressIndicator(color: Colors.white),
-              );
+              return const AppLoading(color: Colors.white, size: 56);
             }
             return BetterPlayer(
               key: _betterPlayerKey,
               controller: _bpController!,
             );
           },
-          loading: () => const Center(
-            child: CircularProgressIndicator(color: Colors.white),
-          ),
+          loading: () => const AppLoading(color: Colors.white, size: 56),
           error: (err, _) => const Center(
             child: Text(
               'Error al cargar el video',

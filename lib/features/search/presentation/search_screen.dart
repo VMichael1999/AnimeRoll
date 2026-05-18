@@ -6,7 +6,8 @@ import '../../../shared/models/anime_model.dart';
 import '../../../shared/models/available_filters.dart';
 import '../../../shared/models/catalog_page.dart';
 import '../../../shared/utils/provider_capabilities.dart';
-import '../../../shared/widgets/error_view.dart';
+import '../../../shared/widgets/app_shimmers.dart';
+import '../../../shared/widgets/network_aware_error.dart';
 import '../../home/data/anime_repository.dart';
 import '../../settings/data/settings_provider.dart';
 import '../data/search_provider.dart';
@@ -417,8 +418,9 @@ class _SearchResults extends ConsumerWidget {
         if (list.isEmpty) return const _NoResults();
         return _ResultsGrid(list: list);
       },
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => ErrorView(
+      loading: () => const PosterGridSkeleton(count: 9),
+      error: (e, _) => NetworkAwareError(
+        error: e,
         message: 'No se pudo buscar. Intenta nuevamente.',
         onRetry: () => ref.invalidate(searchResultsProvider),
       ),
@@ -455,8 +457,9 @@ class _MoodResults extends ConsumerWidget {
           itemBuilder: (context, index) => _MoodResultTile(result: list[index]),
         );
       },
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => ErrorView(
+      loading: () => const PosterGridSkeleton(count: 9),
+      error: (e, _) => NetworkAwareError(
+        error: e,
         message: 'No se pudo buscar por mood.',
         onRetry: () => ref.invalidate(moodResultsProvider),
       ),
@@ -485,8 +488,9 @@ class _CatalogResults extends ConsumerWidget {
         }
         return _ResultsGrid(list: page.results);
       },
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => ErrorView(
+      loading: () => const PosterGridSkeleton(count: 9),
+      error: (e, _) => NetworkAwareError(
+        error: e,
         message: 'No se pudo cargar el catálogo.',
         onRetry: () => ref.invalidate(catalogResultsProvider),
       ),
@@ -1315,8 +1319,8 @@ class _CatalogFilterSheetState extends ConsumerState<_CatalogFilterSheet> {
           const SizedBox(height: 18),
           if (isLoading)
             const Padding(
-              padding: EdgeInsets.symmetric(vertical: 24),
-              child: Center(child: CircularProgressIndicator()),
+              padding: EdgeInsets.symmetric(vertical: 12),
+              child: ListRowSkeleton(count: 6),
             )
           else ...[
             // Solo se renderizan dropdowns para campos que el proveedor

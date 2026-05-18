@@ -4,8 +4,9 @@ import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../shared/models/schedule_anime_model.dart';
 import '../../../shared/widgets/app_network_image.dart';
+import '../../../shared/widgets/app_shimmers.dart';
 import '../../../shared/widgets/app_toast.dart';
-import '../../../shared/widgets/error_view.dart';
+import '../../../shared/widgets/network_aware_error.dart';
 import '../data/schedule_notifications_provider.dart';
 import '../data/schedule_provider.dart';
 
@@ -53,8 +54,9 @@ class ScheduleScreen extends ConsumerWidget {
     return Scaffold(
       body: SafeArea(
         child: schedule.when(
-          loading: () => const Center(child: CircularProgressIndicator()),
-          error: (_, _) => ErrorView(
+          loading: () => const ListRowSkeleton(count: 8),
+          error: (err, _) => NetworkAwareError(
+            error: err,
             message: 'No se pudo cargar el horario.',
             onRetry: () => ref.invalidate(scheduleResultsProvider),
           ),

@@ -7,8 +7,8 @@ class AppConstants {
     'ANIME_API_KEY',
     defaultValue: 'dev-anime1v-key',
   );
-  static const int connectTimeout = 15000;
-  static const int receiveTimeout = 15000;
+  static const int connectTimeout = 20000;
+  static const int receiveTimeout = 30000;
 
   // Providers
   static const List<String> providers = [

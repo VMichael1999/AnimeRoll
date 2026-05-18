@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../shared/models/anime_model.dart';
+import '../../../shared/models/cinehax_hub.dart';
 import '../../../shared/models/monoschinos_hub.dart';
 import '../../../shared/models/schedule_anime_model.dart';
 import '../../../shared/utils/provider_capabilities.dart';
@@ -21,6 +22,13 @@ final hentailaHubProvider = FutureProvider<HentailaHubData>((ref) async {
 final hentaitkHubProvider = FutureProvider<HentailaHubData>((ref) async {
   final repo = ref.read(animeRepositoryProvider);
   return repo.hentaitkHub();
+});
+
+/// Hub de CineHax: hero + secciones por género desde TMDB. Solo se usa
+/// cuando el proveedor activo es `cinehax.com` y ya fue desbloqueado.
+final cinehaxHubProvider = FutureProvider<CinehaxHubData>((ref) async {
+  final repo = ref.read(animeRepositoryProvider);
+  return repo.cinehaxHub();
 });
 
 /// Hub de MonosChinos (últimos capítulos publicados). Solo se usa cuando el

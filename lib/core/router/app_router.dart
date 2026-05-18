@@ -1,4 +1,5 @@
 import 'package:go_router/go_router.dart';
+import '../../features/home/presentation/cinehax_section_screen.dart';
 import '../../features/home/presentation/home_screen.dart';
 import '../../features/search/presentation/search_screen.dart';
 import '../../features/detail/presentation/detail_screen.dart';
@@ -68,6 +69,19 @@ final appRouter = GoRouter(
       builder: (context, state) {
         final animeUrl = state.uri.queryParameters['url'] ?? '';
         return DetailScreen(animeUrl: animeUrl);
+      },
+    ),
+    GoRoute(
+      path: '/cinehax/section',
+      builder: (context, state) {
+        final q = state.uri.queryParameters;
+        return CinehaxSectionScreen(
+          sectionId: q['id'] ?? '',
+          label: q['label'] ?? 'CineHax',
+          type: q['type'] ?? 'movie',
+          genre: q['genre'],
+          sort: q['sort'],
+        );
       },
     ),
     GoRoute(

@@ -4,7 +4,8 @@ import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../shared/models/anime_model.dart';
 import '../../../shared/widgets/app_network_image.dart';
-import '../../../shared/widgets/error_view.dart';
+import '../../../shared/widgets/app_shimmers.dart';
+import '../../../shared/widgets/network_aware_error.dart';
 import '../data/home_provider.dart';
 
 /// Home dedicada de HentaiTK — diferenciada visualmente de HentaiLA (que usa
@@ -70,18 +71,14 @@ class HentaiTKHome extends ConsumerWidget {
                     ]),
                   );
                 },
-                loading: () => SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.all(32),
-                    child: Center(
-                      child: CircularProgressIndicator(color: _brandRed),
-                    ),
-                  ),
+                loading: () => const SliverToBoxAdapter(
+                  child: PosterRowSkeleton(count: 6),
                 ),
-                error: (_, _) => SliverToBoxAdapter(
+                error: (err, _) => SliverToBoxAdapter(
                   child: Padding(
                     padding: const EdgeInsets.all(24),
-                    child: ErrorView(
+                    child: NetworkAwareError(
+                      error: err,
                       message: 'No se pudo cargar el contenido',
                       onRetry: () => ref.invalidate(hentaitkHubProvider),
                     ),

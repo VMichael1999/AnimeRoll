@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../shared/models/episode_model.dart';
+import '../../../shared/widgets/app_loading.dart';
 import '../../home/data/home_provider.dart';
 import '../../settings/data/settings_provider.dart';
 
@@ -138,9 +139,7 @@ class _DownloadServerSheetState extends ConsumerState<_DownloadServerSheet> {
                   if (snapshot.connectionState == ConnectionState.waiting) {
                     return const Padding(
                       padding: EdgeInsets.symmetric(vertical: 40),
-                      child: Center(
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      ),
+                      child: AppLoading(size: 36),
                     );
                   }
                   if (snapshot.hasError) {

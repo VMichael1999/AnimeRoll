@@ -311,6 +311,31 @@ void main() {
         expect(await repo.isProviderAvailable('animeav1.com'), isFalse);
       },
     );
+
+    test('keeps CineHax when server config enables it', () async {
+      adapter.stub('GET', '/anime/providers', {
+        'data': {
+          'enabled': ['animeav1.com', 'cinehax.com'],
+        },
+      });
+      adapter.stub(
+        'GET',
+        '/anime/search',
+        {
+          'data': {
+            'results': [
+              {'title': 'Available', 'url': 'available-url'},
+            ],
+          },
+        },
+        query: {'domain': 'animeav1.com'},
+      );
+
+      expect(await repo.availableProviders(['animeav1.com', 'cinehax.com']), [
+        'animeav1.com',
+        'cinehax.com',
+      ]);
+    });
   });
 }
 

@@ -6,8 +6,11 @@ import '../../../core/theme/app_theme.dart';
 import '../../../shared/models/anime_model.dart';
 import '../../../shared/models/episode_model.dart';
 import '../../../shared/utils/provider_capabilities.dart';
+import '../../../shared/utils/network_error.dart';
+import '../../../shared/widgets/app_shimmers.dart';
 import '../../../shared/widgets/app_toast.dart';
 import '../../../shared/widgets/error_view.dart';
+import '../../../shared/widgets/no_connection_empty.dart';
 import '../data/detail_provider.dart';
 import '../../downloads/data/downloads_provider.dart';
 import '../../downloads/presentation/download_server_sheet.dart';
@@ -26,11 +29,15 @@ class DetailScreen extends ConsumerWidget {
     return Scaffold(
       body: animeAsync.when(
         data: (detail) => _DetailBody(detail: detail),
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => ErrorView(
-          message: 'No se pudo cargar el anime',
-          onRetry: () => ref.invalidate(animeDetailProvider(animeUrl)),
-        ),
+        loading: () => const DetailSkeleton(),
+        error: (e, _) => isNetworkError(e)
+            ? NoConnectionEmpty(
+                onRetry: () => ref.invalidate(animeDetailProvider(animeUrl)),
+              )
+            : ErrorView(
+                message: 'No se pudo cargar el anime',
+                onRetry: () => ref.invalidate(animeDetailProvider(animeUrl)),
+              ),
       ),
     );
   }

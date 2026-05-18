@@ -10,6 +10,7 @@ import 'package:go_router/go_router.dart';
 import 'package:video_player/video_player.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../shared/models/download_model.dart';
+import '../../../shared/widgets/app_loading.dart';
 import '../data/downloads_provider.dart';
 import '../../history/data/watch_history_provider.dart';
 import '../../marathon/data/marathon_provider.dart';
@@ -623,7 +624,7 @@ class _VideoPlaceholder extends StatelessWidget {
       ),
       child: Center(
         child: error == null
-            ? CircularProgressIndicator(color: AppColors.accent2)
+            ? const AppLoading(size: 48)
             : const Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [

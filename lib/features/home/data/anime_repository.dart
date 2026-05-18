@@ -3,6 +3,7 @@ import '../../../core/network/dio_client.dart';
 import '../../../shared/models/anime_model.dart';
 import '../../../shared/models/available_filters.dart';
 import '../../../shared/models/catalog_page.dart';
+import '../../../shared/models/cinehax_hub.dart';
 import '../../../shared/models/download_model.dart';
 import '../../../shared/models/episode_model.dart';
 import '../../../shared/models/monoschinos_hub.dart';
@@ -151,6 +152,50 @@ class AnimeRepository {
       limit: limit,
     );
     return page.results;
+  }
+
+  /// Hub de CineHax: hero + secciones (películas por género, series, top, etc.)
+  /// servidas por el backend a partir de la API de TMDB.
+  Future<CinehaxHubData> cinehaxHub() async {
+    final response = await _dio.get(
+      '/anime/hub',
+      queryParameters: {'domain': 'cinehax.com'},
+    );
+    final data = _responseData(response);
+    return CinehaxHubData.fromJson(data);
+  }
+
+  /// Catálogo paginado de CineHax (películas o series filtradas por género/orden).
+  /// Devuelve `AnimeModel` plano + el total de páginas para scroll infinito.
+  Future<({List<AnimeModel> items, int totalPages})> cinehaxCatalog({
+    String type = 'movie',
+    String? genre,
+    String sort = 'popular',
+    int page = 1,
+    int limit = 30,
+  }) async {
+    final response = await _dio.get(
+      '/anime/catalog',
+      queryParameters: {
+        'domain': 'cinehax.com',
+        'type': type,
+        if (genre != null && genre.isNotEmpty) 'genre': genre,
+        'sort': sort,
+        'page': page,
+        'limit': limit,
+      },
+    );
+    final data = _responseData(response);
+    final rawResults = data['results'];
+    final List items = rawResults is List ? rawResults : const [];
+    final totalPages = (data['totalPages'] as num?)?.toInt() ?? 1;
+    return (
+      items: items
+          .whereType<Map>()
+          .map((e) => AnimeModel.fromJson(e.cast<String, dynamic>()))
+          .toList(),
+      totalPages: totalPages,
+    );
   }
 
   /// Hub de MonosChinos: últimos capítulos publicados en la home del sitio.
@@ -309,9 +354,16 @@ class AnimeRepository {
     final candidates = serverEnabled == null
         ? providers
         : providers.where(serverEnabled.contains).toList();
+    final trustedServerEnabled = serverEnabled == null
+        ? const <String>{}
+        : const <String>{'cinehax.com'};
     final available = <String>[];
     await Future.wait(
       candidates.map((domain) async {
+        if (trustedServerEnabled.contains(domain)) {
+          available.add(domain);
+          return;
+        }
         if (await isProviderAvailable(domain)) {
           available.add(domain);
         }

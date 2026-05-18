@@ -230,3 +230,13 @@ final recapDaysThresholdPrefProvider =
       (ref) =>
           PersistedSettingNotifier(key: 'recapDaysThreshold', defaultValue: 7),
     );
+
+// Whether the user has unlocked the CineHax VIP provider with the access
+// code. Persisted across app launches.
+final cinehaxVipUnlockedProvider =
+    StateNotifierProvider<PersistedSettingNotifier<bool>, bool>(
+      (ref) => PersistedSettingNotifier(
+        key: 'cinehaxVipUnlocked',
+        defaultValue: false,
+      ),
+    );

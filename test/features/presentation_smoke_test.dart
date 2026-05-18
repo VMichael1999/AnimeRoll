@@ -15,6 +15,7 @@ import 'package:anime_roll/features/settings/data/settings_provider.dart';
 import 'package:anime_roll/features/settings/presentation/settings_screen.dart';
 import 'package:anime_roll/features/watchlist/presentation/watchlist_screen.dart';
 import 'package:anime_roll/shared/models/anime_model.dart';
+import 'package:anime_roll/shared/models/catalog_page.dart';
 import 'package:anime_roll/shared/models/episode_model.dart';
 import 'package:anime_roll/shared/models/schedule_anime_model.dart';
 import 'dart:convert';
@@ -111,7 +112,9 @@ void main() {
           ),
           searchResultsProvider.overrideWith((ref) async => [anime]),
           moodResultsProvider.overrideWith((ref) async => []),
-          catalogResultsProvider.overrideWith((ref) async => [animeTwo]),
+          catalogResultsProvider.overrideWith(
+            (ref) async => const CatalogPage(),
+          ),
         ],
       ),
     );

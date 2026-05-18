@@ -10,6 +10,8 @@ import '../../../shared/models/download_model.dart';
 import '../../../shared/models/monoschinos_hub.dart';
 import '../../../shared/utils/provider_capabilities.dart';
 import '../../../shared/widgets/anime_card.dart';
+import '../../../shared/widgets/app_loading.dart';
+import '../../../shared/widgets/app_shimmers.dart';
 import '../../../shared/widgets/wide_card.dart';
 import '../../downloads/data/downloads_provider.dart';
 import '../../favorites/data/favorites_provider.dart';
@@ -17,6 +19,7 @@ import '../../history/data/watch_history_provider.dart';
 import '../../settings/data/settings_provider.dart';
 import '../data/home_provider.dart';
 import '../../search/data/search_provider.dart' show availableFiltersProvider;
+import 'cinehax_home.dart';
 import 'hentaitk_home.dart';
 
 class HomeScreen extends ConsumerWidget {
@@ -34,7 +37,13 @@ class HomeScreen extends ConsumerWidget {
     final isHentaila = providerId == ProviderId.hentaila;
     final isHentaiTK = providerId == ProviderId.hentaitk;
     final isMonosChinos = providerId == ProviderId.monoschinos;
+    final isCinehax = providerId == ProviderId.cinehax;
     final mainList = selectedGenre == 'Todo' ? popular : genreAnime;
+
+    // CineHax: home VIP de películas y series (TMDB).
+    if (isCinehax) {
+      return const CinehaxHome();
+    }
 
     // MonosChinos: timeline retro propio.
     if (isMonosChinos) {
@@ -2182,15 +2191,8 @@ class _MonosChinosHome extends ConsumerWidget {
                     ),
                   );
                 },
-                loading: () => SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.all(32),
-                    child: Center(
-                      child: CircularProgressIndicator(
-                        color: AppColors.accent,
-                      ),
-                    ),
-                  ),
+                loading: () => const SliverToBoxAdapter(
+                  child: PosterRowSkeleton(count: 6),
                 ),
                 error: (_, _) => SliverToBoxAdapter(
                   child: Padding(
@@ -2734,16 +2736,7 @@ class _MonosAiringSection extends ConsumerWidget {
                 itemBuilder: (_, i) => _MonosAiringCard(anime: items[i]),
               );
             },
-            loading: () => Center(
-              child: SizedBox(
-                width: 22,
-                height: 22,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: AppColors.accent,
-                ),
-              ),
-            ),
+            loading: () => const AppLoading(size: 28),
             error: (_, _) => Center(
               child: Text(
                 'No se pudo cargar.',

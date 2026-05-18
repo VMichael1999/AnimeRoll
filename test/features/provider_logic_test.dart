@@ -6,6 +6,7 @@ import 'package:anime_roll/features/schedule/data/schedule_provider.dart';
 import 'package:anime_roll/features/search/data/search_provider.dart';
 import 'package:anime_roll/features/settings/data/settings_provider.dart';
 import 'package:anime_roll/shared/models/anime_model.dart';
+import 'package:anime_roll/shared/models/catalog_page.dart';
 import 'package:anime_roll/shared/models/episode_model.dart';
 import 'package:anime_roll/shared/models/schedule_anime_model.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -131,7 +132,9 @@ void main() {
 
       container.read(searchModeProvider.notifier).state = SearchMode.catalog;
       expect(
-        (await container.read(catalogResultsProvider.future)).single.title,
+        (await container.read(
+          catalogResultsProvider.future,
+        )).results.single.title,
         anime.title,
       );
     },
@@ -220,6 +223,24 @@ class _Repo extends AnimeRepository {
   }) async => const [
     AnimeModel(title: 'Frieren', url: 'anime-url', cover: 'cover.jpg'),
   ];
+
+  @override
+  Future<CatalogPage> catalogPage({
+    String domain = 'animeav1.com',
+    String letter = '#',
+    String? type,
+    String? genre,
+    String? year,
+    String? status,
+    String? sort,
+    bool uncensored = false,
+    String? search,
+    int limit = 40,
+  }) async => const CatalogPage(
+    results: [
+      AnimeModel(title: 'Frieren', url: 'anime-url', cover: 'cover.jpg'),
+    ],
+  );
 
   @override
   Future<HentailaHubData> hentailaHub() async => const HentailaHubData(

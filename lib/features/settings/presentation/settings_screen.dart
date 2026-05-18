@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../core/theme/app_theme.dart';
 import '../data/settings_provider.dart';
+import 'provider_picker_sheet.dart';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -151,47 +152,15 @@ class SettingsScreen extends ConsumerWidget {
 
   void _showProviderPicker(BuildContext context, WidgetRef ref) {
     final providersAsync = ref.read(availableProvidersProvider);
-    showModalBottomSheet(
+    final providers = providersAsync.maybeWhen(
+      data: (items) => items,
+      orElse: () => const <String>[],
+    );
+    showProviderPickerSheet(
       context: context,
-      backgroundColor: AppColors.surface,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (_) => Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Padding(
-            padding: EdgeInsets.all(16),
-            child: Text(
-              'Seleccionar proveedor',
-              style: TextStyle(fontWeight: FontWeight.w700),
-            ),
-          ),
-          ...providersAsync
-              .maybeWhen(
-                data: (providers) => providers,
-                orElse: () => const <String>[],
-              )
-              .map(
-                (p) => ListTile(
-                  title: Text(p, style: TextStyle(fontSize: 13)),
-                  trailing: ref.watch(providerPrefProvider) == p
-                      ? Icon(Icons.check_rounded, color: AppColors.accent2)
-                      : null,
-                  onTap: () {
-                    ref.read(providerPrefProvider.notifier).set(p);
-                    Navigator.pop(context);
-                  },
-                ),
-              ),
-          if (providersAsync.isLoading)
-            const Padding(
-              padding: EdgeInsets.all(16),
-              child: CircularProgressIndicator(strokeWidth: 2),
-            ),
-          const SizedBox(height: 8),
-        ],
-      ),
+      ref: ref,
+      providers: providers,
+      isLoading: providersAsync.isLoading,
     );
   }
 

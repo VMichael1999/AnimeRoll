@@ -89,6 +89,43 @@ class WatchlistNotifier extends StateNotifier<List<WatchlistEntry>> {
     state = state.where((e) => e.anime.url != animeUrl).toList();
     await _persist();
   }
+
+  /// Actualiza el estado del anime automáticamente cuando el usuario está
+  /// reproduciendo. Reglas confirmadas con el usuario:
+  ///   - Reproduce un episodio + no está en la lista o estaba en "Planeado"
+  ///     → pasa a "Viendo".
+  ///   - Reproduce el ÚLTIMO episodio del anime → pasa a "Completado"
+  ///     (sin importar progreso del video).
+  ///   - Estados explícitos del usuario ("En pausa", "Abandonado",
+  ///     "Completado") NO se sobrescriben automáticamente para no engañarle.
+  Future<void> autoUpdateFromPlayback({
+    required AnimeModel anime,
+    required int episodeNumber,
+    required int totalEpisodes,
+  }) async {
+    if (anime.url.isEmpty) return;
+    final current = statusFor(anime.url);
+
+    // Decisiones manuales del usuario — intocables.
+    if (current == WatchStatus.onHold ||
+        current == WatchStatus.dropped ||
+        current == WatchStatus.completed) {
+      return;
+    }
+
+    // Último episodio = Completado.
+    final isLastEpisode = totalEpisodes > 0 && episodeNumber >= totalEpisodes;
+    if (isLastEpisode) {
+      await setStatus(anime, WatchStatus.completed);
+      return;
+    }
+
+    // No estaba en la lista o estaba en Planeado → Viendo.
+    if (current == null || current == WatchStatus.planToWatch) {
+      await setStatus(anime, WatchStatus.watching);
+    }
+    // Si ya está en "Viendo", no hace nada (evita persistencia innecesaria).
+  }
 }
 
 final watchlistProvider =

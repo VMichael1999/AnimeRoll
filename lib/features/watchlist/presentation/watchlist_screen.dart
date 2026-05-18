@@ -5,6 +5,8 @@ import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../shared/models/anime_model.dart';
 import '../../../shared/models/watch_status.dart';
+import '../../../shared/utils/provider_utils.dart';
+import '../../settings/data/settings_provider.dart';
 import '../data/watchlist_provider.dart';
 
 class WatchlistScreen extends ConsumerStatefulWidget {
@@ -34,7 +36,13 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
 
   @override
   Widget build(BuildContext context) {
-    final entries = ref.watch(watchlistProvider);
+    final allEntries = ref.watch(watchlistProvider);
+    final activeProvider = ref.watch(providerPrefProvider);
+    // Filtra por proveedor activo (mismo criterio que Favoritos). El resto
+    // queda en SharedPreferences hasta que el usuario cambie a su proveedor.
+    final entries = allEntries
+        .where((e) => providerForUrl(e.anime.url) == activeProvider)
+        .toList(growable: false);
 
     return Scaffold(
       body: SafeArea(

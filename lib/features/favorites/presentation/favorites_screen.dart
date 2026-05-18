@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../shared/models/anime_model.dart';
+import '../../../shared/utils/provider_utils.dart';
+import '../../settings/data/settings_provider.dart';
 import '../data/favorites_provider.dart';
 
 class FavoritesScreen extends ConsumerStatefulWidget {
@@ -19,7 +21,14 @@ class _FavoritesScreenState extends ConsumerState<FavoritesScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final favorites = ref.watch(favoritesProvider);
+    final allFavorites = ref.watch(favoritesProvider);
+    final activeProvider = ref.watch(providerPrefProvider);
+    // Filtra por proveedor activo. Los favoritos de otros proveedores no se
+    // borran, solo quedan ocultos hasta volver a su proveedor. Si la URL
+    // guardada no tiene host (data legacy), cae al default AnimeAV1.
+    final favorites = allFavorites
+        .where((anime) => providerForUrl(anime.url) == activeProvider)
+        .toList(growable: false);
     final filters = _filters(favorites);
     final visible = _visibleFavorites(favorites);
 

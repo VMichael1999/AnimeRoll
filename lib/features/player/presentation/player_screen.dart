@@ -21,6 +21,7 @@ import '../../downloads/data/downloads_provider.dart';
 import '../../home/data/home_provider.dart' show catalogGenreValue;
 import '../../downloads/presentation/download_server_sheet.dart';
 import '../../favorites/data/favorites_provider.dart';
+import '../../watchlist/data/watchlist_provider.dart';
 import '../../history/data/watch_history_provider.dart';
 import '../../marathon/data/marathon_provider.dart';
 import '../../marathon/presentation/marathon_hud.dart';
@@ -286,6 +287,27 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
             source: 'stream',
           ),
     );
+
+    // Auto-actualización de "Mi Lista". El notifier es idempotente (no
+    // persiste si el estado ya es el correcto) así que llamarlo en cada
+    // tick del progress save es seguro y barato.
+    final anime = detail?.anime;
+    final episodeNumber = episode?.number;
+    final totalEpisodes = detail?.episodes.length ?? 0;
+    if (anime != null &&
+        anime.url.isNotEmpty &&
+        episodeNumber != null &&
+        totalEpisodes > 0) {
+      unawaited(
+        ref
+            .read(watchlistProvider.notifier)
+            .autoUpdateFromPlayback(
+              anime: anime,
+              episodeNumber: episodeNumber,
+              totalEpisodes: totalEpisodes,
+            ),
+      );
+    }
   }
 
   void _tryNextServer(String failedUrl) {

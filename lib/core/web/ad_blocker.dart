@@ -63,6 +63,32 @@ List<ContentBlocker> buildEmbedAdBlockers() {
     block(r".*outbrain\.com.*"),
     block(r".*taboola\.com.*"),
 
+    // ─── Push notification / fake-notify networks ────────────────────────
+    // Reportados en vidara.to / myvidplay con icono "cloud + badge 1" que
+    // simula una notificación del sistema.
+    block(r".*pushpushgo\.com.*"),
+    block(r".*pushnative\.com.*"),
+    block(r".*pushpros\.com.*"),
+    block(r".*webpush\.center.*"),
+    block(r".*subscribe\.gettyimages.*"),
+    block(r".*notifyme\.com.*"),
+    block(r".*notification(?:s|service)?\.[a-z]+.*"),
+    block(r".*pushwhip\.com.*"),
+    block(r".*push-noti.*"),
+    block(r".*notify\.network.*"),
+    block(r".*serve\.pushpros.*"),
+    block(r".*onesignal\.com.*"),
+    block(r".*notixapi\.com.*"),
+    block(r".*notix\.io.*"),
+    block(r".*notix\.media.*"),
+    block(r".*propu\.sh.*"),
+
+    // ─── Otros redirects/popunders observados en hentai embeds ────────────
+    block(r".*realsrv\.com.*"),
+    block(r".*ouo\.io.*"),
+    block(r".*linkvertise\.com.*"),
+    block(r".*shorte\.st.*"),
+
     // ─── Trackers ────────────────────────────────────────────────────────
     block(r".*facebook\.net.*"),
     block(r".*connect\.facebook\.net.*"),

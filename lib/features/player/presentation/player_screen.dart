@@ -584,10 +584,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
 })();
 ''';
 
-  /// JS injected at document end. VOE specifically renders ad overlays as inline
-  /// divs/iframes with high z-index that sit ON TOP of the video. We:
-  ///   1) Hide them with a stylesheet (covers static & SPA renders).
-  ///   2) Run a MutationObserver that strips new overlay nodes as they appear.
+  /// JS injected at document end. Sirve a dos casos:
+  ///   1) Overlays clásicos de VOE (divs con class `overlay`, `popup`, etc.)
+  ///   2) Push-notification falsas (vidara / myvidplay con icono `cloud + 1`).
+  ///      Estas inyectan un elemento `position: fixed` con z-index altísimo
+  ///      que NO usa class semántico — los detectamos por geometría.
   static const String _antiOverlayScript = r'''
 (function() {
   // 1. Stylesheet that hides common ad-overlay patterns.
@@ -612,7 +613,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
 
   // 2. MutationObserver: strip overlay nodes injected after page load.
   var adKeywords = ['overlay', 'popup', 'banner', 'advert', 'ads', 'adsterra',
-    'exoclick', 'popcdn', 'lambsaktur'];
+    'exoclick', 'popcdn', 'lambsaktur', 'push-notify', 'pushpushgo',
+    'push-prompt', 'notification', 'notify', 'os-prompt'];
   function looksLikeAd(el) {
     if (!el || !el.tagName) return false;
     var t = el.tagName.toLowerCase();
@@ -629,25 +631,82 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     }
     if (t === 'iframe') {
       var src = (el.src || '').toLowerCase();
-      if (src.indexOf('ads') !== -1 || src.indexOf('popcdn') !== -1 ||
-          src.indexOf('lambsaktur') !== -1) {
-        return true;
+      var adHosts = ['ads', 'popcdn', 'lambsaktur', 'pushpushgo', 'notix',
+        'propu.sh', 'realsrv', 'onesignal'];
+      for (var j = 0; j < adHosts.length; j++) {
+        if (src.indexOf(adHosts[j]) !== -1) return true;
       }
     }
     return false;
   }
+
+  // 3. Detector geométrico de "push-notification fake".
+  // Patrón observado (vidara.to / myvidplay): un <div> position:fixed con
+  // z-index muy alto, contiene un <img> chico (icono) y/o un badge con
+  // número rojo. No usa class semántico — los pillamos por dimensiones.
+  function looksLikeFakeNotify(el) {
+    if (!el || !el.tagName || el.nodeType !== 1) return false;
+    try {
+      var cs = window.getComputedStyle(el);
+      if (cs.position !== 'fixed' && cs.position !== 'absolute') return false;
+      var zIndex = parseInt(cs.zIndex, 10);
+      if (isNaN(zIndex) || zIndex < 999) return false;
+      // El icono push real suele ser de 40-150px. Si es más grande, es
+      // probable que sea un legitimate dialog (no lo tocamos).
+      var rect = el.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) return false;
+      if (rect.width > 200 || rect.height > 200) return false;
+      // Whitelist: si está dentro del player principal, no lo tocamos.
+      var p = el.closest('video, [class*="player"], [id*="player"], [class*="control"]');
+      if (p) return false;
+      // Si hay un <img> pequeño o un badge con número dentro, es muy
+      // probable que sea el "cloud + 1" ad.
+      var hasIcon = !!el.querySelector('img, svg');
+      var text = (el.textContent || '').trim();
+      var hasBadgeNumber = /^[0-9]{1,3}$/.test(text) ||
+                           text.split(/\s+/).some(function(w){return /^[0-9]{1,3}$/.test(w);});
+      return hasIcon || hasBadgeNumber;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function strip(node) {
+    if (!node || node.nodeType !== 1) return;
+    if (looksLikeAd(node) || looksLikeFakeNotify(node)) {
+      try { node.remove(); } catch (e) {}
+    }
+  }
+
+  // Pasada inicial sobre fixed/absolute existentes.
+  document.querySelectorAll('div, aside, section').forEach(strip);
+
   var observer = new MutationObserver(function(mutations) {
     for (var m = 0; m < mutations.length; m++) {
       var added = mutations[m].addedNodes;
       for (var i = 0; i < added.length; i++) {
-        var node = added[i];
-        if (node.nodeType === 1 && looksLikeAd(node)) {
-          try { node.remove(); } catch (e) {}
-        }
+        strip(added[i]);
       }
     }
   });
   observer.observe(document.documentElement, { childList: true, subtree: true });
+
+  // 4. Bloquear suscripción a Push API (que es lo que pide el navegador
+  // antes de mostrar el "permitir notificaciones"). Sin esto, en algunos
+  // navegadores el embed puede mostrar un diálogo nativo.
+  try {
+    if (window.Notification) {
+      window.Notification.requestPermission = function() {
+        return Promise.resolve('denied');
+      };
+    }
+    if (navigator.serviceWorker) {
+      var origRegister = navigator.serviceWorker.register;
+      navigator.serviceWorker.register = function() {
+        return Promise.reject(new Error('blocked'));
+      };
+    }
+  } catch (e) {}
 })();
 ''';
 

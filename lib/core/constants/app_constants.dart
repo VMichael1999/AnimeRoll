@@ -18,6 +18,8 @@ class AppConstants {
     'jkanime.net',
     'monoschinos2.net',
     'hentaila.com',
+    'hentaitk.net',
+    'cinehax.com',
   ];
 
   // Quality options

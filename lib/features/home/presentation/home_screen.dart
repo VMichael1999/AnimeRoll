@@ -17,6 +17,7 @@ import '../../history/data/watch_history_provider.dart';
 import '../../settings/data/settings_provider.dart';
 import '../data/home_provider.dart';
 import '../../search/data/search_provider.dart' show availableFiltersProvider;
+import 'hentaitk_home.dart';
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
@@ -31,16 +32,19 @@ class HomeScreen extends ConsumerWidget {
     final activeProvider = ref.watch(providerPrefProvider);
     final providerId = ProviderId.fromDomain(activeProvider);
     final isHentaila = providerId == ProviderId.hentaila;
+    final isHentaiTK = providerId == ProviderId.hentaitk;
     final isMonosChinos = providerId == ProviderId.monoschinos;
     final mainList = selectedGenre == 'Todo' ? popular : genreAnime;
 
-    // MonosChinos: estilo timeline retro propio, distinto a AnimeAV1 (carrusel
-    // + filas landscape) y a HentaiLA (grid 2-col de posters). El widget
-    // dedicado consume directamente `monosChinosHubProvider` y no reusa
-    // popular/latest porque su shape es distinto (latestEpisodes con campos
-    // `episode` y `genre`).
+    // MonosChinos: timeline retro propio.
     if (isMonosChinos) {
       return const _MonosChinosHome();
+    }
+
+    // HentaiTK: home dedicada con hero "más visto", banners por mes y grid
+    // landscape — distinta de la 2-col de posters de HentaiLA.
+    if (isHentaiTK) {
+      return const HentaiTKHome();
     }
 
     if (isHentaila) {

@@ -15,6 +15,14 @@ final hentailaHubProvider = FutureProvider<HentailaHubData>((ref) async {
   return repo.hentailaHub();
 });
 
+/// Hub de HentaiTK. Comparte el modelo `HentailaHubData` con HentaiLA
+/// porque ambos exponen latestEpisodes / latestMedia. El backend respeta
+/// el shape pero la fuente es hentaitk.net.
+final hentaitkHubProvider = FutureProvider<HentailaHubData>((ref) async {
+  final repo = ref.read(animeRepositoryProvider);
+  return repo.hentaitkHub();
+});
+
 /// Hub de MonosChinos (últimos capítulos publicados). Solo se usa cuando el
 /// proveedor activo es `monoschinos2.net`; en otros casos el home cae al flujo
 /// genérico (schedule / catalog).

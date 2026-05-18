@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../shared/models/anime_model.dart';
 import '../../../shared/models/available_filters.dart';
+import '../../../shared/models/catalog_page.dart';
 import '../../../shared/utils/provider_capabilities.dart';
 import '../../home/data/anime_repository.dart';
 import '../../home/data/home_provider.dart';
@@ -126,7 +127,7 @@ final availableFiltersProvider = FutureProvider.autoDispose
       return repo.availableFilters(domain: domain);
     });
 
-final catalogResultsProvider = FutureProvider.autoDispose<List<AnimeModel>>((
+final catalogResultsProvider = FutureProvider.autoDispose<CatalogPage>((
   ref,
 ) async {
   final letter = ref.watch(catalogLetterProvider);
@@ -137,8 +138,11 @@ final catalogResultsProvider = FutureProvider.autoDispose<List<AnimeModel>>((
   // Domain del catálogo: respeta el proveedor activo. Antes solo contemplaba
   // hentaila y caía a animeav1 para MonosChinos, mostrando catálogo de AV1
   // dentro de la home de MC (bug). Ahora cualquier proveedor activo (AV1,
-  // hentaila, monoschinos…) se respeta.
-  return repo.catalog(
+  // hentaila, monoschinos, hentaitk…) se respeta.
+  // El backend puede agregar `months: [...]` cuando se filtra por año en
+  // proveedores que soportan agrupación (HentaiTK), así que devolvemos un
+  // `CatalogPage` con la info adicional.
+  return repo.catalogPage(
     domain: activeProvider,
     letter: letter,
     type: filters.type,
@@ -147,8 +151,6 @@ final catalogResultsProvider = FutureProvider.autoDispose<List<AnimeModel>>((
     status: filters.status,
     sort: filters.sort,
     uncensored: filters.uncensored,
-    // El parámetro `search` solo aplica al modo "catalog-con-buscador-inline"
-    // (hentaila). Otros proveedores tienen pantalla de búsqueda separada.
     search: ProviderId.fromDomain(activeProvider) == ProviderId.hentaila
         ? query.trim()
         : null,

@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import '../../../core/network/dio_client.dart';
 import '../../../shared/models/anime_model.dart';
 import '../../../shared/models/available_filters.dart';
+import '../../../shared/models/catalog_page.dart';
 import '../../../shared/models/download_model.dart';
 import '../../../shared/models/episode_model.dart';
 import '../../../shared/models/monoschinos_hub.dart';
@@ -89,7 +90,11 @@ class AnimeRepository {
     return AvailableFilters.fromJson(_responseData(response));
   }
 
-  Future<List<AnimeModel>> catalog({
+  /// Versión "rica" del catálogo que devuelve `CatalogPage` con `results` +
+  /// opcionalmente `months`. Algunos proveedores (hentaitk + año) agrupan
+  /// por mes; los demás caen al flujo plano. La UI usa `isGroupedByMonth`
+  /// para decidir cómo renderizar.
+  Future<CatalogPage> catalogPage({
     String domain = 'animeav1.com',
     String letter = '#',
     String? type,
@@ -116,12 +121,36 @@ class AnimeRepository {
         'limit': limit,
       }..removeWhere((_, v) => v == null || v == ''),
     );
-    final data = _responseData(response);
-    final results = data['results'];
-    final List items = results is List ? results : const [];
-    return items
-        .map((e) => AnimeModel.fromJson(e as Map<String, dynamic>))
-        .toList();
+    return CatalogPage.fromJson(_responseData(response));
+  }
+
+  /// Wrapper de compatibilidad: devuelve solo la lista plana. Lo usan los
+  /// providers que NO necesitan saber del grouping por mes.
+  Future<List<AnimeModel>> catalog({
+    String domain = 'animeav1.com',
+    String letter = '#',
+    String? type,
+    String? genre,
+    String? year,
+    String? status,
+    String? sort,
+    bool uncensored = false,
+    String? search,
+    int limit = 40,
+  }) async {
+    final page = await catalogPage(
+      domain: domain,
+      letter: letter,
+      type: type,
+      genre: genre,
+      year: year,
+      status: status,
+      sort: sort,
+      uncensored: uncensored,
+      search: search,
+      limit: limit,
+    );
+    return page.results;
   }
 
   /// Hub de MonosChinos: últimos capítulos publicados en la home del sitio.
@@ -142,6 +171,32 @@ class AnimeRepository {
             (e) => MonosChinosLatestEpisode.fromJson(e.cast<String, dynamic>()),
           )
           .toList(),
+    );
+  }
+
+  /// Hub de HentaiTK. Reusa `HentailaHubData` porque ambos comparten shape
+  /// (latestEpisodes + latestMedia), pero el backend lo sirve desde su
+  /// propio scraper de hentaitk.net.
+  Future<HentailaHubData> hentaitkHub() async {
+    final response = await _dio.get(
+      '/anime/hub',
+      queryParameters: {'domain': 'hentaitk.net'},
+    );
+    final data = _responseData(response);
+
+    List<AnimeModel> animeList(String key) {
+      final raw = data[key];
+      final List items = raw is List ? raw : const [];
+      return items
+          .map((e) => AnimeModel.fromJson(e as Map<String, dynamic>))
+          .toList();
+    }
+
+    return HentailaHubData(
+      featured: const [],
+      latestMedia: animeList('latestMedia'),
+      latestEpisodes: animeList('latestEpisodes'),
+      genres: const [],
     );
   }
 

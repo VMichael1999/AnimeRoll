@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../shared/models/anime_model.dart';
 import '../../../shared/models/available_filters.dart';
+import '../../../shared/models/catalog_page.dart';
 import '../../../shared/utils/provider_capabilities.dart';
 import '../../../shared/widgets/error_view.dart';
 import '../../home/data/anime_repository.dart';
@@ -466,18 +467,94 @@ class _MoodResults extends ConsumerWidget {
 class _CatalogResults extends ConsumerWidget {
   const _CatalogResults();
 
+  /// Color de banner de mes (rojo HentaiTK). Coincide con
+  /// `HentaiTKHome._brandRed` para que la sección por mes se vea como una
+  /// continuación visual del proveedor.
+  static const _monthBannerRed = Color(0xFFEF4444);
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final results = ref.watch(catalogResultsProvider);
     return results.when(
-      data: (list) {
-        if (list.isEmpty) return const _NoResults();
-        return _ResultsGrid(list: list);
+      data: (page) {
+        if (page.results.isEmpty) return const _NoResults();
+        // Cuando el backend agrega `months`, renderizamos secciones por mes
+        // con banners rojos. Si no, el grid plano de siempre.
+        if (page.isGroupedByMonth) {
+          return _MonthGroupedResults(months: page.months);
+        }
+        return _ResultsGrid(list: page.results);
       },
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (e, _) => ErrorView(
         message: 'No se pudo cargar el catálogo.',
         onRetry: () => ref.invalidate(catalogResultsProvider),
+      ),
+    );
+  }
+}
+
+/// Lista vertical de secciones `ESTRENOS [MES] [AÑO]` + grid por mes.
+class _MonthGroupedResults extends StatelessWidget {
+  final List<CatalogMonth> months;
+
+  const _MonthGroupedResults({required this.months});
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView.builder(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+      itemCount: months.length,
+      itemBuilder: (context, i) {
+        final m = months[i];
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _MonthBanner(label: m.label, year: m.year),
+            const SizedBox(height: 12),
+            _ResultsGrid(list: m.items, scrollable: false),
+            const SizedBox(height: 20),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _MonthBanner extends StatelessWidget {
+  final String label;
+  final int? year;
+
+  const _MonthBanner({required this.label, required this.year});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+      decoration: BoxDecoration(
+        color: _CatalogResults._monthBannerRed,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: [
+          const Icon(
+            Icons.calendar_month_rounded,
+            size: 14,
+            color: Colors.white,
+          ),
+          const SizedBox(width: 8),
+          Text(
+            year == null
+                ? 'ESTRENOS ${label.toUpperCase()}'
+                : 'ESTRENOS ${label.toUpperCase()} $year',
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w900,
+              color: Colors.white,
+              letterSpacing: 1.5,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -709,11 +786,53 @@ class _ProviderFilter extends ConsumerWidget {
 class _ResultsGrid extends ConsumerWidget {
   final List<AnimeModel> list;
 
-  const _ResultsGrid({required this.list});
+  /// Cuando `false`, no envuelve el contenido en `Expanded` ni hace que el
+  /// grid scrollee por sí mismo (lo usa el padre `ListView`/`SliverList`
+  /// del catálogo agrupado por mes para evitar scrolls anidados).
+  final bool scrollable;
+
+  const _ResultsGrid({required this.list, this.scrollable = true});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final layout = ref.watch(catalogLayoutProvider);
+    final isList = layout == 'list';
+    final inner = isList
+        ? ListView.separated(
+            padding: scrollable
+                ? const EdgeInsets.fromLTRB(16, 0, 16, 16)
+                : EdgeInsets.zero,
+            shrinkWrap: !scrollable,
+            physics: scrollable
+                ? const AlwaysScrollableScrollPhysics()
+                : const NeverScrollableScrollPhysics(),
+            itemCount: list.length,
+            separatorBuilder: (context, _) => const SizedBox(height: 10),
+            itemBuilder: (context, i) => _ResultListTile(anime: list[i]),
+          )
+        : GridView.builder(
+            padding: scrollable
+                ? const EdgeInsets.fromLTRB(16, 0, 16, 16)
+                : EdgeInsets.zero,
+            shrinkWrap: !scrollable,
+            physics: scrollable
+                ? const AlwaysScrollableScrollPhysics()
+                : const NeverScrollableScrollPhysics(),
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 2,
+              childAspectRatio: 0.58,
+              crossAxisSpacing: 14,
+              mainAxisSpacing: 16,
+            ),
+            itemCount: list.length,
+            itemBuilder: (context, i) => _ResultGridTile(anime: list[i]),
+          );
+
+    if (!scrollable) {
+      // Sin header de "N resultados" cuando va dentro de una sección por mes.
+      return inner;
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -724,24 +843,23 @@ class _ResultsGrid extends ConsumerWidget {
             style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
           ),
         ),
-        Expanded(
-          child: layout == 'list'
-              ? ListView.separated(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                  itemCount: list.length,
-                  separatorBuilder: (context, _) => const SizedBox(height: 10),
-                  itemBuilder: (context, i) => _ResultListTile(anime: list[i]),
-                )
-              : GridView.builder(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 2,
-                    childAspectRatio: 0.58,
-                    crossAxisSpacing: 14,
-                    mainAxisSpacing: 16,
-                  ),
-                  itemCount: list.length,
-                  itemBuilder: (context, i) => _ResultGridTile(anime: list[i]),
+        Expanded(child: isList
+            ? ListView.separated(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                itemCount: list.length,
+                separatorBuilder: (context, _) => const SizedBox(height: 10),
+                itemBuilder: (context, i) => _ResultListTile(anime: list[i]),
+              )
+            : GridView.builder(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 2,
+                  childAspectRatio: 0.58,
+                  crossAxisSpacing: 14,
+                  mainAxisSpacing: 16,
+                ),
+                itemCount: list.length,
+                itemBuilder: (context, i) => _ResultGridTile(anime: list[i]),
                 ),
         ),
       ],

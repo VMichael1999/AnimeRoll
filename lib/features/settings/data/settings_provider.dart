@@ -122,6 +122,17 @@ final providerPrefProvider =
       ),
     );
 
+/// Flag persistente que indica si el proveedor VIP (CineHax) ya fue
+/// desbloqueado con el código. Si es false, al intentar activar CineHax se
+/// muestra el diálogo de unlock pidiendo el código.
+final cinehaxUnlockedProvider =
+    StateNotifierProvider<PersistedSettingNotifier<bool>, bool>(
+      (ref) => PersistedSettingNotifier(
+        key: 'cinehaxUnlocked',
+        defaultValue: false,
+      ),
+    );
+
 final availableProvidersProvider = FutureProvider<List<String>>((ref) async {
   final repo = AnimeRepository();
   final available = await repo.availableProviders(AppConstants.providers);
